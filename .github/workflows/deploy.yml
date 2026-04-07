@@ -1,0 +1,473 @@
+name: Terraform Deploy (Reusable)
+
+# ── Reusable workflow called from config repo ────────────────────────────────
+# This workflow is designed to be called from a separate config repository.
+# It handles Terraform plan, apply, and destroy operations with safety gates.
+#
+# Usage in config repo:
+#   - name: Deploy infrastructure
+#     uses: <owner>/<module-repo>/.github/workflows/deploy.yml@v1.0.0
+#     with:
+#       config_file: configurations/env-prod/config.yaml
+#       action: plan
+#       environment: prod
+#       module_version: v1.0.0
+#     secrets:
+#       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+#       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+#       AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+on:
+  workflow_call:
+    inputs:
+      config_file:
+        required: true
+        type: string
+        description: "Path to YAML config file (e.g., configurations/env-prod/config.yaml)"
+      action:
+        required: true
+        type: string
+        description: "Terraform action: 'plan', 'apply', or 'destroy'"
+      environment:
+        required: true
+        type: string
+        description: "Environment name (dev, staging, prod) for concurrency control & approvals"
+      module_version:
+        required: false
+        type: string
+        default: "main"
+        description: "Module version/tag to check out (e.g., v1.0.0, main)"
+      terraform_version:
+        required: false
+        type: string
+        default: "1.14.5"
+        description: "Terraform version to use"
+      plan_artifact_name:
+        required: false
+        type: string
+        default: "terraform-plan"
+        description: "Name of saved plan artifact (for apply action)"
+    secrets:
+      AZURE_CLIENT_ID:
+        required: true
+        description: "Azure service principal client ID (for OIDC)"
+      AZURE_TENANT_ID:
+        required: true
+        description: "Azure tenant ID"
+      AZURE_SUBSCRIPTION_ID:
+        required: true
+        description: "Azure subscription ID"
+    outputs:
+      plan_summary:
+        description: "JSON summary of plan (to_add, to_change, to_destroy, error)"
+        value: ${{ jobs.deploy.outputs.plan_summary }}
+      state_key:
+        description: "Remote state file key from terraform_backend"
+        value: ${{ jobs.deploy.outputs.state_key }}
+      deployment_id:
+        description: "Unique deployment ID (commit SHA + timestamp)"
+        value: ${{ jobs.deploy.outputs.deployment_id }}
+      apply_status:
+        description: "Status of apply operation: 'success', 'failed', or 'not_run'"
+        value: ${{ jobs.deploy.outputs.apply_status }}
+
+env:
+  TF_VERSION: ${{ inputs.terraform_version }}
+  GO_VERSION: "1.25"
+
+jobs:
+  # ── Validate action & environment ──────────────────────────────────────────
+  validate:
+    name: "Validate inputs"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate action
+        run: |
+          case "${{ inputs.action }}" in
+            plan|apply|destroy) echo "✓ Action valid: ${{ inputs.action }}" ;;
+            *) echo "✗ Invalid action: ${{ inputs.action }}"; exit 1 ;;
+          esac
+
+      - name: Validate environment
+        run: |
+          case "${{ inputs.environment }}" in
+            dev|staging|prod) echo "✓ Environment valid: ${{ inputs.environment }}" ;;
+            *) echo "✗ Invalid environment: ${{ inputs.environment }}"; exit 1 ;;
+          esac
+
+  # ── Main deployment job ────────────────────────────────────────────────────
+  deploy:
+    name: "Deploy (${{ inputs.action }}) to ${{ inputs.environment }}"
+    runs-on: ubuntu-latest
+    needs: validate
+    # Concurrency per environment + state key to prevent parallel apply
+    concurrency:
+      group: "${{ inputs.environment }}-deployment"
+      cancel-in-progress: false
+    environment:
+      name: ${{ inputs.environment }}
+    permissions:
+      id-token: write    # OIDC token
+      contents: read
+      actions: read      # Read artifacts
+    outputs:
+      plan_summary: ${{ steps.plan_summary.outputs.result }}
+      state_key: ${{ steps.extract_backend.outputs.state_key }}
+      deployment_id: ${{ steps.deployment_meta.outputs.deployment_id }}
+      apply_status: ${{ steps.apply_result.outputs.status }}
+
+    steps:
+      # ── Checkout module repo ──────────────────────────────────────────────
+      - name: Checkout module repo
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.module_version }}
+          fetch-depth: 0  # Full history for version detection
+
+      - name: Verify module repo contents
+        run: |
+          [ -f ./tf.sh ] || { echo "✗ tf.sh not found"; exit 1; }
+          [ -f ./backend.tf ] || { echo "✗ backend.tf not found"; exit 1; }
+          [ -d ./modules ] || { echo "✗ modules/ not found"; exit 1; }
+          echo "✓ Module repo structure valid"
+
+      # ── Download plan artifact (if apply action) ──────────────────────────
+      - name: Download plan artifact (apply only)
+        if: inputs.action == 'apply'
+        uses: actions/download-artifact@v4.1.7
+        with:
+          name: ${{ inputs.plan_artifact_name }}
+          path: /tmp/plan-artifact
+
+      - name: Validate downloaded plan
+        if: inputs.action == 'apply'
+        run: |
+          [ -f /tmp/plan-artifact/plan.tfplan ] || { echo "✗ plan.tfplan not found in artifact"; exit 1; }
+          [ -f /tmp/plan-artifact/plan_summary.json ] || { echo "✗ plan_summary.json not found"; exit 1; }
+          echo "✓ Plan artifact valid"
+
+      # ── Setup providers & Terraform ────────────────────────────────────────
+      - name: Checkout rest provider
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/terraform-provider-rest
+          path: .providers/rest
+          ref: main
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+
+      - name: Build & install rest provider
+        run: .github/scripts/setup-providers.sh .providers/rest
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      # ── Extract backend config from YAML ───────────────────────────────────
+      - name: Extract backend configuration
+        id: extract_backend
+        run: |
+          python3 << 'PYEOF'
+          import yaml, json, sys, re
+          
+          config_file = "${{ inputs.config_file }}"
+          try:
+              with open(config_file) as f:
+                  cfg = yaml.safe_load(f)
+              
+              backend = cfg.get('terraform_backend', {})
+              if not backend:
+                  print("✗ terraform_backend not found in config")
+                  sys.exit(1)
+              
+              btype = backend.get('type')
+              if not btype:
+                  print("✗ terraform_backend.type not found")
+                  sys.exit(1)
+              
+              # Validate azurerm backend
+              if btype == 'azurerm':
+                  required = ['storage_account_name', 'container_name', 'key', 'resource_group_name']
+                  for field in required:
+                      if not backend.get(field):
+                          print(f"✗ azurerm backend missing required field: {field}")
+                          sys.exit(1)
+                  
+                  # Validate state key naming convention
+                  # Format: <org>/<env>/<region>/<workload>/terraform.tfstate
+                  key = backend.get('key', '')
+                  key_pattern = r'^[a-z0-9][a-z0-9-]*(/[a-z0-9]+){3}/terraform\.tfstate$'
+                  if key and not re.match(key_pattern, key):
+                      print(
+                          f"✗ Invalid state key format: '{key}'\n"
+                          f"  Expected: <org>/<env>/<region>/<workload>/terraform.tfstate\n"
+                          f"  Example: acme/prod/westeurope/core-infra/terraform.tfstate"
+                      )
+                      sys.exit(1)
+              
+              state_key = backend.get('key')
+              if not state_key:
+                  print("✗ terraform_backend.key not found")
+                  sys.exit(1)
+              
+              # Output for GitHub Actions
+              print(f"state_key={state_key}")
+              
+              # Store full backend config for later use
+              with open("/tmp/backend_config.json", "w") as f:
+                  json.dump(backend, f)
+              
+              print(f"✓ Backend config extracted: {state_key} (type: {btype})")
+          except FileNotFoundError:
+              print(f"✗ Config file not found: {config_file}")
+              sys.exit(1)
+          except Exception as e:
+              print(f"✗ Failed to parse config: {e}")
+              sys.exit(1)
+          PYEOF
+
+      # ── Azure Login (OIDC) ─────────────────────────────────────────────────
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # ── Acquire tokens ────────────────────────────────────────────────────
+      - name: Acquire Azure tokens
+        id: tokens
+        run: |
+          # ARM token for Azure REST API
+          ARM_TOKEN=$(az account get-access-token --resource https://management.azure.com --query accessToken -o tsv)
+          echo "::add-mask::$ARM_TOKEN"
+          echo "arm_token=$ARM_TOKEN" >> "$GITHUB_OUTPUT"
+          
+          # Graph token for Entra ID
+          GRAPH_TOKEN=$(az account get-access-token --resource https://graph.microsoft.com --query accessToken -o tsv)
+          echo "::add-mask::$GRAPH_TOKEN"
+          echo "graph_token=$GRAPH_TOKEN" >> "$GITHUB_OUTPUT"
+          
+          SUBSCRIPTION_ID=$(az account show --query id -o tsv)
+          echo "subscription_id=$SUBSCRIPTION_ID" >> "$GITHUB_OUTPUT"
+          
+          echo "✓ Tokens acquired"
+
+      # ── Terraform Validate ────────────────────────────────────────────────
+      - name: Terraform Validate
+        run: terraform validate
+        env:
+          TF_VAR_azure_access_token: "placeholder"  # Not needed for validate
+
+      # ── Terraform Plan ─────────────────────────────────────────────────────
+      - name: Terraform Plan
+        if: inputs.action == 'plan'
+        id: plan
+        run: |
+          bash ./tf.sh plan "${{ inputs.config_file }}" 2>&1 | tee /tmp/plan.log
+        env:
+          TF_VAR_azure_access_token: ${{ steps.tokens.outputs.arm_token }}
+          TF_VAR_graph_access_token: ${{ steps.tokens.outputs.graph_token }}
+          TF_VAR_subscription_id: ${{ steps.tokens.outputs.subscription_id }}
+          TF_CI_MODE: "true"  # Signal to tf.sh to skip interactive prompts
+
+      # ── Extract & summarize plan output ────────────────────────────────────
+      - name: Summarize plan
+        if: inputs.action == 'plan'
+        id: plan_summary
+        run: |
+          python3 << 'PYEOF'
+          import json, re, sys
+          
+          # Parse terraform plan output for resource counts
+          try:
+              with open("/tmp/plan.log") as f:
+                  content = f.read()
+              
+              # Look for Terraform's plan summary line
+              # Example: "Plan: 3 to add, 1 to change, 0 to destroy."
+              match = re.search(r'Plan: (\d+) to add, (\d+) to change, (\d+) to destroy', content)
+              
+              if match:
+                  summary = {
+                      "to_add": int(match.group(1)),
+                      "to_change": int(match.group(2)),
+                      "to_destroy": int(match.group(3)),
+                      "error": None
+                  }
+              else:
+                  # Check for errors
+                  if "Error:" in content or "error:" in content:
+                      summary = {
+                          "to_add": 0,
+                          "to_change": 0,
+                          "to_destroy": 0,
+                          "error": "Plan failed (see logs)"
+                      }
+                  else:
+                      summary = {
+                          "to_add": 0,
+                          "to_change": 0,
+                          "to_destroy": 0,
+                          "error": None
+                      }
+              
+              result = json.dumps(summary)
+              print(f"result={result}")
+              
+              # Save for artifact upload
+              with open("/tmp/plan_summary.json", "w") as f:
+                  json.dump(summary, f, indent=2)
+              
+              print(f"✓ Plan summary: {summary['to_add']} add, {summary['to_change']} change, {summary['to_destroy']} destroy")
+          except Exception as e:
+              print(f"✗ Failed to parse plan: {e}")
+              sys.exit(1)
+          PYEOF
+
+      # ── Upload plan artifact ───────────────────────────────────────────────
+      - name: Upload plan artifact
+        if: inputs.action == 'plan'
+        uses: actions/upload-artifact@v4.3.3
+        with:
+          name: ${{ inputs.plan_artifact_name }}
+          path: |
+            /tmp/plan_summary.json
+            /tmp/plan.log
+          retention-days: 30
+          compression-level: 6
+
+      # ── Terraform Apply ────────────────────────────────────────────────────
+      - name: Terraform Apply (from artifact)
+        if: inputs.action == 'apply'
+        id: apply
+        run: |
+          # Apply the exact plan that was approved
+          bash ./tf.sh apply "${{ inputs.config_file }}" 2>&1 | tee /tmp/apply.log
+        env:
+          TF_VAR_azure_access_token: ${{ steps.tokens.outputs.arm_token }}
+          TF_VAR_graph_access_token: ${{ steps.tokens.outputs.graph_token }}
+          TF_VAR_subscription_id: ${{ steps.tokens.outputs.subscription_id }}
+          TF_CI_MODE: "true"
+
+      - name: Capture apply status
+        if: inputs.action == 'apply'
+        id: apply_result
+        run: |
+          if grep -q "Apply complete!" /tmp/apply.log; then
+              echo "status=success" >> "$GITHUB_OUTPUT"
+              echo "✓ Apply succeeded"
+          elif grep -q "Error:" /tmp/apply.log || grep -q "error:" /tmp/apply.log; then
+              echo "status=failed" >> "$GITHUB_OUTPUT"
+              echo "✗ Apply failed"
+              exit 1
+          else
+              echo "status=unknown" >> "$GITHUB_OUTPUT"
+          fi
+
+      # ── Terraform Destroy ──────────────────────────────────────────────────
+      - name: Terraform Destroy (with safety gate)
+        if: inputs.action == 'destroy'
+        run: |
+          echo "⚠️  DESTROY ACTION INITIATED"
+          echo "Environment: ${{ inputs.environment }}"
+          echo "Config: ${{ inputs.config_file }}"
+          echo ""
+          echo "Showing destroy plan first..."
+          bash ./tf.sh plan "${{ inputs.config_file }}" -destroy 2>&1 | tee /tmp/destroy_plan.log || true
+          echo ""
+          echo "Execute destroy with: ./tf.sh apply <config> after manual review"
+          echo "For now, failing to require explicit confirmation"
+          exit 1
+        env:
+          TF_VAR_azure_access_token: ${{ steps.tokens.outputs.arm_token }}
+          TF_VAR_graph_access_token: ${{ steps.tokens.outputs.graph_token }}
+          TF_VAR_subscription_id: ${{ steps.tokens.outputs.subscription_id }}
+
+      # ── Deployment Metadata ────────────────────────────────────────────────
+      - name: Generate deployment metadata
+        id: deployment_meta
+        run: |
+          DEPLOYMENT_ID="${{ github.sha }}-$(date +%s)"
+          echo "deployment_id=$DEPLOYMENT_ID" >> "$GITHUB_OUTPUT"
+          
+          python3 << 'PYEOF'
+          import json, os
+          from datetime import datetime
+          
+          meta = {
+              "deployment_id": "$DEPLOYMENT_ID",
+              "action": "${{ inputs.action }}",
+              "environment": "${{ inputs.environment }}",
+              "config_file": "${{ inputs.config_file }}",
+              "module_version": "${{ inputs.module_version }}",
+              "terraform_version": "${{ env.TF_VERSION }}",
+              "commit_sha": "${{ github.sha }}",
+              "commit_ref": "${{ github.ref }}",
+              "workflow": "${{ github.workflow }}",
+              "run_id": ${{ github.run_id }},
+              "actor": "${{ github.actor }}",
+              "timestamp": datetime.utcnow().isoformat() + "Z"
+          }
+          
+          with open("/tmp/deployment_meta.json", "w") as f:
+              json.dump(meta, f, indent=2)
+          
+          print(f"✓ Deployment metadata saved")
+          PYEOF
+
+      # ── Upload all artifacts ───────────────────────────────────────────────
+      - name: Upload deployment artifacts
+        if: always()
+        uses: actions/upload-artifact@v4.3.3
+        with:
+          name: deployment-${{ inputs.action }}-${{ inputs.environment }}-${{ github.run_id }}
+          path: |
+            /tmp/deployment_meta.json
+            /tmp/backend_config.json
+            /tmp/plan.log
+            /tmp/apply.log
+            /tmp/destroy_plan.log
+          retention-days: 90
+          if-no-files-found: ignore
+
+      # ── Post-job summary ───────────────────────────────────────────────────
+      - name: Job summary
+        if: always()
+        run: |
+          cat >> $GITHUB_STEP_SUMMARY << EOF
+          ## Terraform ${{ inputs.action }} Summary
+          
+          - **Environment**: ${{ inputs.environment }}
+          - **Config**: ${{ inputs.config_file }}
+          - **State Key**: ${{ steps.extract_backend.outputs.state_key }}
+          - **Module Version**: ${{ inputs.module_version }}
+          - **Deployment ID**: ${{ steps.deployment_meta.outputs.deployment_id }}
+          - **Actor**: ${{ github.actor }}
+          - **Commit**: [\`${{ github.sha }}\`](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})
+          
+          EOF
+          
+          if [ "${{ inputs.action }}" = "plan" ]; then
+              cat >> $GITHUB_STEP_SUMMARY << EOF
+          ### Plan Results
+          - **Status**: ${{ steps.plan_summary.outputs.result }}
+          
+          **Artifacts**: Download \`terraform-plan\` for review and apply phase.
+          EOF
+          fi
+          
+          if [ "${{ inputs.action }}" = "apply" ]; then
+              cat >> $GITHUB_STEP_SUMMARY << EOF
+          ### Apply Results
+          - **Status**: ${{ steps.apply_result.outputs.status }}
+          
+          **Artifacts**: Download \`deployment-*\` for deployment metadata and logs.
+          EOF
+          fi

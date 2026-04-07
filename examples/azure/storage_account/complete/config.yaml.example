@@ -1,0 +1,26 @@
+# Complete storage account configuration (all attributes).
+# Authentication — supply via environment variables:
+#   export TF_VAR_access_token=$(az account get-access-token --resource https://management.azure.com --query accessToken -o tsv)
+#   export TF_VAR_subscription_id=$(az account show --query id -o tsv)
+#   export TF_VAR_config_file=config.yaml
+#   terraform init && terraform apply  (from repo root)
+
+storage_accounts:
+  complete:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: rg-myapp-prod
+    account_name: mystorageacctprod  # optional: omit to use naming convention (name_unique)
+    sku_name: Standard_LRS
+    kind: StorageV2
+    location: westeurope             # optional: omit to use var.naming.location
+    tags:
+      environment: production
+      team: platform
+      cost_center: "12345"
+    https_traffic_only_enabled: true
+    minimum_tls_version: TLS1_2
+    allow_blob_public_access: false
+    allow_shared_key_access: false
+    public_network_access: Enabled
+    default_to_oauth_authentication: true
+    allow_cross_tenant_replication: false

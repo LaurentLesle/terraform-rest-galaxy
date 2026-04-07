@@ -1,0 +1,188 @@
+# GitHub Hosted Runners with Azure VNet Injection (CAF vWAN Pattern)
+#
+# This configuration deploys:
+#   - Resource group for the runner infrastructure
+#   - Resource provider registration for GitHub.Network
+#   - VNet with runner subnet (delegated to GitHub.Network/networkSettings)
+#         and DNS resolver inbound subnet
+#   - Route table (default route → centralized firewall via vHub)
+#   - DNS resolver with inbound endpoint (for centralized private DNS resolution)
+#   - Virtual Hub connection (spoke VNet → centralized vHub, internet security enabled)
+#   - Private DNS zone virtual network links (centralized zones → runner VNet)
+#   - GitHub.Network/networkSettings (links subnet to GitHub org)
+#   - User-assigned managed identity + federated credentials for GitHub OIDC
+#   - GitHub runner group with network configuration
+#   - GitHub hosted runner in the runner group
+#
+# Architecture (Cloud Adoption Framework — vWAN Secure Hub pattern):
+#
+#   ┌─ Hub (centralized, existing) ─────────────────────────┐
+#   │  vWAN → vHub → Azure Firewall → Routing Intent        │
+#   │  Private DNS Zones (privatelink.*)                     │
+#   └──────────────────────────────┬─────────────────────────┘
+#                                  │ vHub Connection
+#   ┌─ Spoke: GitHub Runners ──────┴─────────────────────────┐
+#   │  VNet (10.200.0.0/24)                                  │
+#   │  ├─ snet-github-runners (/25, GitHub.Network delegate) │
+#   │  └─ snet-dns-resolver-inbound (/28)                    │
+#   │  Route Table (0.0.0.0/0 → vHub firewall)               │
+#   │  DNS Resolver (inbound endpoint)                       │
+#   │  GitHub.Network/networkSettings                        │
+#   └────────────────────────────────────────────────────────┘
+#
+# Prerequisites:
+#   export TF_VAR_azure_access_token=$(az account get-access-token --resource https://management.azure.com --query accessToken -o tsv)
+#   export TF_VAR_subscription_id=$(az account show --query id -o tsv)
+#   export TF_VAR_github_token=$(gh auth token)
+#   TF_VAR_config_file=configurations/acme_github_runners.yaml terraform apply
+
+default_location: westeurope
+
+# ── External references (existing hub infrastructure) ────────────────────────
+externals:
+  github_organizations:
+    acme:
+      org_name: "REPLACE_WITH_ORG_NAME"
+      business_id: "REPLACE_WITH_ORG_DATABASE_ID"
+  azure_virtual_hubs:
+    hub3a:
+      subscription_id: "REPLACE_WITH_SUBSCRIPTION_ID"
+      resource_group_name: "rg-hub"
+      virtual_hub_name: "vhub-hub3a"
+
+# ── Resource Provider Registration ───────────────────────────────────────────
+azure_resource_provider_registrations:
+  github_network:
+    resource_provider_namespace: GitHub.Network
+
+# ── Resource Group ───────────────────────────────────────────────────────────
+azure_resource_groups:
+  github_runners:
+    resource_group_name: rg-acme-github-runners
+    location: westeurope
+
+# ── Virtual Network ──────────────────────────────────────────────────────────
+azure_virtual_networks:
+  github_runners:
+    resource_group_name: ref:azure_resource_groups.github_runners.resource_group_name
+    virtual_network_name: vnet-acme-github-runners
+    location: ref:azure_resource_groups.github_runners.location
+    address_space:
+      - "10.200.0.0/24"
+    dns_servers:
+      - "168.63.129.16"
+    subnets:
+      - name: snet-github-runners
+        address_prefix: "10.200.0.0/25"
+        delegations:
+          - "GitHub.Network/networkSettings"
+      - name: snet-dns-resolver-inbound
+        address_prefix: "10.200.0.128/28"
+        delegations:
+          - "Microsoft.Network/dnsResolvers"
+
+# ── Route Table ──────────────────────────────────────────────────────────────
+azure_route_tables:
+  github_runners:
+    resource_group_name: ref:azure_resource_groups.github_runners.resource_group_name
+    route_table_name: rt-acme-github-runners
+    location: ref:azure_resource_groups.github_runners.location
+    routes:
+      - name: default-to-firewall
+        address_prefix: "0.0.0.0/0"
+        next_hop_type: VirtualAppliance
+        next_hop_ip_address: "10.0.0.68"
+
+# ── DNS Resolver (inbound endpoint for centralized private DNS) ──────────────
+azure_dns_resolvers:
+  github_runners:
+    resource_group_name: ref:azure_resource_groups.github_runners.resource_group_name
+    dns_resolver_name: dnspr-acme-github-runners
+    location: ref:azure_resource_groups.github_runners.location
+    virtual_network_id: ref:azure_virtual_networks.github_runners.id
+    inbound_endpoints:
+      - name: inbound
+        subnet_id: ref:azure_virtual_networks.github_runners.subnet_ids.snet-dns-resolver-inbound
+
+# ── Virtual Hub Connection (spoke → centralized vHub) ────────────────────────
+azure_virtual_hub_connections:
+  hub3a_to_github_runners:
+    resource_group_name: ref:externals.azure_virtual_hubs.hub3a.resource_group_name
+    virtual_hub_name: ref:externals.azure_virtual_hubs.hub3a.virtual_hub_name
+    remote_virtual_network_id: ref:azure_virtual_networks.github_runners.id
+    enable_internet_security: true
+
+# ── Private DNS Zone Links (centralized zones → runner VNet) ─────────────────
+azure_private_dns_zones:
+  privatelink_blob:
+    resource_group_name: ref:azure_resource_groups.github_runners.resource_group_name
+    zone_name: privatelink.blob.core.windows.net
+    virtual_network_links:
+      - name: link-github-runners
+        virtual_network_id: ref:azure_virtual_networks.github_runners.id
+
+  privatelink_vault:
+    resource_group_name: ref:azure_resource_groups.github_runners.resource_group_name
+    zone_name: privatelink.vaultcore.azure.net
+    virtual_network_links:
+      - name: link-github-runners
+        virtual_network_id: ref:azure_virtual_networks.github_runners.id
+
+  privatelink_acr:
+    resource_group_name: ref:azure_resource_groups.github_runners.resource_group_name
+    zone_name: privatelink.azurecr.io
+    virtual_network_links:
+      - name: link-github-runners
+        virtual_network_id: ref:azure_virtual_networks.github_runners.id
+
+# ── User-Assigned Managed Identity (for GitHub OIDC → Azure) ─────────────────
+azure_user_assigned_identities:
+  github_runner:
+    resource_group_name: ref:azure_resource_groups.github_runners.resource_group_name
+    identity_name: id-acme-github-runner
+    location: ref:azure_resource_groups.github_runners.location
+
+# ── Federated Identity Credentials (GitHub OIDC federation) ──────────────────
+azure_federated_identity_credentials:
+  github_runner_main:
+    resource_group_name: ref:azure_resource_groups.github_runners.resource_group_name
+    identity_name: ref:azure_user_assigned_identities.github_runner.name
+    federated_credential_name: github-oidc-main
+    issuer: "https://token.actions.githubusercontent.com"
+    subject: "repo:REPLACE_WITH_ORG_NAME/REPLACE_WITH_REPO_NAME:ref:refs/heads/main"
+
+  github_runner_pr:
+    resource_group_name: ref:azure_resource_groups.github_runners.resource_group_name
+    identity_name: ref:azure_user_assigned_identities.github_runner.name
+    federated_credential_name: github-oidc-pr
+    issuer: "https://token.actions.githubusercontent.com"
+    subject: "repo:REPLACE_WITH_ORG_NAME/REPLACE_WITH_REPO_NAME:pull_request"
+
+# ── GitHub.Network/networkSettings (links subnet to GitHub org) ──────────────
+azure_github_network_settings:
+  runners:
+    resource_group_name: ref:azure_resource_groups.github_runners.resource_group_name
+    network_settings_name: ns-acme-github-runners
+    location: ref:azure_resource_groups.github_runners.location
+    subnet_id: ref:azure_virtual_networks.github_runners.subnet_ids.snet-github-runners
+    business_id: ref:externals.github_organizations.acme.business_id
+
+# ── GitHub Runner Group (with network configuration) ─────────────────────────
+github_runner_groups:
+  azure_vnet_runners:
+    organization: ref:externals.github_organizations.acme.org_name
+    name: azure-vnet-runners
+    visibility: all
+    allows_public_repositories: false
+    network_configuration_id: ref:azure_github_network_settings.runners.id
+
+# ── GitHub Hosted Runner (in the runner group) ───────────────────────────────
+github_hosted_runners:
+  linux_4core:
+    organization: ref:externals.github_organizations.acme.org_name
+    name: linux-4core-vnet
+    image_id: ubuntu-24.04
+    image_source: github
+    size: 4-core
+    runner_group_id: ref:github_runner_groups.azure_vnet_runners.id
+    maximum_runners: 10

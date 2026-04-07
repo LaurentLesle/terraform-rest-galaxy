@@ -1,0 +1,24 @@
+# Act secrets (do not commit)
+.secrets
+
+# Python cache and test artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Local backups and temp files
+*.bak
+*.tmp
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraform.lock.hcl

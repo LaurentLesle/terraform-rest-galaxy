@@ -1,0 +1,41 @@
+{
+  "servers": {
+    "azure-specs": {
+      "type": "stdio",
+      "command": "python3",
+      "args": ["${workspaceFolder}/.github/mcp/azure-specs-server.py"],
+      "env": {
+        "AZURE_SPECS_ROOT": "/Users/laurentlesle/git/github.com/azure/azure-rest-api-specs/specification"
+      }
+    },
+    "drawio": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "drawio-mcp-server", "--editor"]
+    },
+    "msgraph-specs": {
+      "type": "stdio",
+      "command": "python3",
+      "args": ["${workspaceFolder}/.github/mcp/msgraph-specs-server.py"],
+      "env": {
+        "MSGRAPH_SPECS_ROOT": "/Users/laurentlesle/git/github.com/microsoftgraph/msgraph-metadata"
+      }
+    },
+    "github-specs": {
+      "type": "stdio",
+      "command": "python3",
+      "args": ["${workspaceFolder}/.github/mcp/github-specs-server.py"],
+      "env": {
+        "GITHUB_SPECS_ROOT": "/Users/laurentlesle/git/github.com/github/rest-api-description"
+      }
+    },
+    "kubernetes-specs": {
+      "type": "stdio",
+      "command": "python3",
+      "args": ["${workspaceFolder}/.github/mcp/kubernetes-specs-server.py"],
+      "env": {
+        "K8S_SPECS_ROOT": "/Users/laurentlesle/git/github.com/kubernetes/kubernetes"
+      }
+    }
+  }
+}

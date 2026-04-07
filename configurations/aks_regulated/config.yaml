@@ -1,0 +1,351 @@
+# ── AKS Regulated: Private AKS Automatic + PostgreSQL + VNet Peering ─────────
+#
+# Deploys a regulated AKS cluster following the baseline-regulated architecture:
+#   - Spoke VNet peered to launchpad hub (bidirectional)
+#   - AKS Automatic (private cluster, workload identity, OIDC, Azure RBAC)
+#   - Cilium CNI overlay, Defender, image cleaner
+#   - PostgreSQL Flexible Server with VNet integration + Entra auth
+#   - Private DNS zones for AKS + PostgreSQL (linked to hub + spoke)
+#   - Provider registrations (Microsoft.ContainerService, Microsoft.DBforPostgreSQL)
+#
+# Prerequisites:
+#   - 01-launchpad deployed (hub VNet + VPN Gateway exist)
+#   - VPN connected to access private endpoints
+#
+# Apply:
+#   ./tf.sh apply configurations/aks_regulated/config.yaml
+
+# ── State backend ────────────────────────────────────────────────────────────
+terraform_backend:
+  type: azurerm
+  resource_group_name: rg-terraform-state
+  storage_account_name: stdplstate001
+  container_name: tfstate
+  key: aks_regulated.tfstate
+  remote_states:
+    launchpad:
+      key: launchpad.tfstate
+
+# ── External references ──────────────────────────────────────────────────────
+externals:
+  azure_tenants:
+    primary:
+      tenant_id: "4fcc1d67-2ccc-4e50-99c7-93a41aecbca3"
+      _exported_attributes: ["*"]
+
+# ── Default location ─────────────────────────────────────────────────────────
+default_location: swedencentral
+
+# ── Provider registrations ───────────────────────────────────────────────────
+azure_resource_provider_registrations:
+  container_service:
+    resource_provider_namespace: Microsoft.ContainerService
+  postgresql:
+    resource_provider_namespace: Microsoft.DBforPostgreSQL
+  network:
+    resource_provider_namespace: Microsoft.Network
+  policy_insights:
+    resource_provider_namespace: Microsoft.PolicyInsights
+
+# ── Resource Group ───────────────────────────────────────────────────────────
+azure_resource_groups:
+  aks_regulated:
+    resource_group_name: rg-aks-regulated
+    location: swedencentral
+    tags:
+      purpose: aks-regulated
+      managed_by: terraform
+
+# ── Spoke Virtual Network ───────────────────────────────────────────────────
+azure_virtual_networks:
+  spoke:
+    resource_group_name: ref:azure_resource_groups.aks_regulated.resource_group_name
+    virtual_network_name: vnet-spoke-aks-regulated
+    location: ref:azure_resource_groups.aks_regulated.location
+    address_space:
+      - "10.1.0.0/16"
+    subnets:
+      - name: snet-aks
+        address_prefix: "10.1.0.0/20"
+      - name: snet-private-endpoints
+        address_prefix: "10.1.16.0/24"
+      - name: snet-apiserver
+        address_prefix: "10.1.18.0/28"
+        delegations:
+          - Microsoft.ContainerService/managedClusters
+      - name: snet-postgres
+        address_prefix: "10.1.17.0/24"
+        delegations:
+          - Microsoft.DBforPostgreSQL/flexibleServers
+    tags: ref:azure_resource_groups.aks_regulated.tags
+
+# ── VNet Peering (Spoke → Hub + Hub → Spoke) ────────────────────────────────
+# Bidirectional peering:
+#   - spoke_to_hub: created on the spoke VNet (this config owns it)
+#   - hub_to_spoke: created on the hub VNet (launchpad state manages the VNet,
+#     but we can create the peering sub-resource via the ARM API)
+
+azure_virtual_network_peerings:
+  spoke_to_hub:
+    resource_group_name: ref:azure_resource_groups.aks_regulated.resource_group_name
+    virtual_network_name: ref:azure_virtual_networks.spoke.virtual_network_name
+    peering_name: peer-spoke-to-hub
+    remote_virtual_network_id: ref:remote_states.launchpad.azure_values.azure_virtual_networks.hub.id
+    allow_virtual_network_access: true
+    allow_forwarded_traffic: true
+    use_remote_gateways: true
+  hub_to_spoke:
+    resource_group_name: ref:remote_states.launchpad.azure_values.azure_resource_groups.launchpad.resource_group_name
+    virtual_network_name: ref:remote_states.launchpad.azure_values.azure_virtual_networks.hub.name
+    peering_name: peer-hub-to-spoke-aks
+    remote_virtual_network_id: ref:azure_virtual_networks.spoke.id
+    allow_virtual_network_access: true
+    allow_forwarded_traffic: true
+    allow_gateway_transit: true
+
+# ── User Assigned Identity (for AKS control plane) ──────────────────────────
+azure_user_assigned_identities:
+  aks_control_plane:
+    resource_group_name: ref:azure_resource_groups.aks_regulated.resource_group_name
+    identity_name: id-aks-regulated-cp
+    location: ref:azure_resource_groups.aks_regulated.location
+    tags: ref:azure_resource_groups.aks_regulated.tags
+  # Workload identity for the test app (used by pods via federated credential)
+  test_app:
+    resource_group_name: ref:azure_resource_groups.aks_regulated.resource_group_name
+    identity_name: id-test-app-postgres
+    location: ref:azure_resource_groups.aks_regulated.location
+    tags: ref:azure_resource_groups.aks_regulated.tags
+
+# ── Role Assignments ─────────────────────────────────────────────────────────
+# Network Contributor on the spoke VNet (for AKS to manage networking)
+azure_role_assignments:
+  aks_cp_network_contributor:
+    scope: ref:azure_virtual_networks.spoke.id
+    role_definition_id: "/subscriptions/${ref:caller.subscription_id}/providers/Microsoft.Authorization/roleDefinitions/4d97b98b-1d4f-4787-a291-c67834d212e7"
+    principal_id: ref:azure_user_assigned_identities.aks_control_plane.principal_id
+    principal_type: ServicePrincipal
+    description: "AKS control plane identity — Network Contributor on spoke VNet"
+  # Private DNS Zone Contributor on AKS private DNS zone
+  aks_cp_dns_contributor:
+    scope: ref:azure_private_dns_zones.aks.id
+    role_definition_id: "/subscriptions/${ref:caller.subscription_id}/providers/Microsoft.Authorization/roleDefinitions/b12aa53e-6015-4669-85d0-8515ebb3ae7f"
+    principal_id: ref:azure_user_assigned_identities.aks_control_plane.principal_id
+    principal_type: ServicePrincipal
+    description: "AKS control plane identity — Private DNS Zone Contributor on AKS DNS zone"
+
+# ── Role Assignments (post-AKS) ──────────────────────────────────────────────
+# These target resources created at L3 (e.g. managed clusters).
+azure_role_assignments_post:
+  # AKS RBAC Cluster Admin for the caller (required to manage K8s resources via Azure RBAC)
+  caller_aks_cluster_admin:
+    scope: ref:azure_managed_clusters.aks_regulated.id
+    role_definition_id: "/subscriptions/${ref:caller.subscription_id}/providers/Microsoft.Authorization/roleDefinitions/b1ff04bb-8a4e-4dc4-8eb5-8693973ce19b"
+    principal_id: ref:caller.object_id
+    principal_type: User
+    description: "Caller — AKS RBAC Cluster Admin on AKS cluster"
+
+# ── Private DNS Zones ────────────────────────────────────────────────────────
+azure_private_dns_zones:
+  aks:
+    resource_group_name: ref:azure_resource_groups.aks_regulated.resource_group_name
+    zone_name: privatelink.swedencentral.azmk8s.io
+    virtual_network_links:
+      - name: link-spoke
+        virtual_network_id: ref:azure_virtual_networks.spoke.id
+        registration_enabled: false
+      - name: link-hub
+        virtual_network_id: ref:remote_states.launchpad.azure_values.azure_virtual_networks.hub.id
+        registration_enabled: false
+    tags: ref:azure_resource_groups.aks_regulated.tags
+  postgres:
+    resource_group_name: ref:azure_resource_groups.aks_regulated.resource_group_name
+    zone_name: privatelink.postgres.database.azure.com
+    virtual_network_links:
+      - name: link-spoke
+        virtual_network_id: ref:azure_virtual_networks.spoke.id
+        registration_enabled: false
+      - name: link-hub
+        virtual_network_id: ref:remote_states.launchpad.azure_values.azure_virtual_networks.hub.id
+        registration_enabled: false
+    tags: ref:azure_resource_groups.aks_regulated.tags
+
+# ── AKS Managed Cluster (Automatic + Regulated) ─────────────────────────────
+azure_managed_clusters:
+  aks_regulated:
+    resource_group_name: ref:azure_resource_groups.aks_regulated.resource_group_name
+    cluster_name: aks-regulated-001
+    location: ref:azure_resource_groups.aks_regulated.location
+    # SKU
+    sku_name: Automatic
+    sku_tier: Standard
+    # Identity — UserAssigned for BYO private DNS zone
+    identity_type: UserAssigned
+    identity_user_assigned_identity_ids:
+      - ref:azure_user_assigned_identities.aks_control_plane.id
+    # Network — Cilium overlay
+    network_plugin: azure
+    network_plugin_mode: overlay
+    network_dataplane: cilium
+    network_policy: cilium
+    service_cidr: "10.200.0.0/16"
+    dns_service_ip: "10.200.0.10"
+    pod_cidr: "10.201.0.0/16"
+    # Private cluster — BYO DNS zone
+    enable_private_cluster: true
+    private_dns_zone: ref:azure_private_dns_zones.aks.id
+    enable_private_cluster_public_fqdn: false
+    enable_vnet_integration: true
+    api_server_subnet_id: ref:azure_virtual_networks.spoke.subnet_ids.snet-apiserver
+    disable_run_command: true
+    # AAD + Azure RBAC
+    aad_managed: true
+    aad_enable_azure_rbac: true
+    # Security — workload identity + OIDC + image cleaner
+    enable_workload_identity: true
+    enable_oidc_issuer: true
+    enable_defender: false
+    enable_image_cleaner: true
+    # Agent pool — system pool in AKS subnet (required for Automatic SKU with BYOVNET)
+    agent_pool_profiles:
+      - name: systempool
+        mode: System
+        count: 1
+        vm_size: Standard_D4ds_v5
+        vnet_subnet_id: ref:azure_virtual_networks.spoke.subnet_ids.snet-aks
+        availability_zones:
+          - "1"
+          - "2"
+          - "3"
+    # Cluster properties
+    disable_local_accounts: true
+    enable_rbac: true
+    upgrade_channel: stable
+    node_os_upgrade_channel: NodeImage
+    public_network_access: Enabled
+    tags: ref:azure_resource_groups.aks_regulated.tags
+
+# ── PostgreSQL Flexible Server ───────────────────────────────────────────────
+azure_postgresql_flexible_servers:
+  app_db:
+    resource_group_name: ref:azure_resource_groups.aks_regulated.resource_group_name
+    server_name: psql-aks-regulated-001
+    location:  "Sweden Central" # ref:azure_resource_groups.aks_regulated.location
+    # SKU
+    sku_name: Standard_D2ds_v5
+    sku_tier: GeneralPurpose
+    server_version: "16"
+    # Auth — Entra only (passwordless)
+    active_directory_auth: Enabled
+    password_auth: Disabled
+    auth_tenant_id: ref:externals.azure_tenants.primary.tenant_id
+    # Storage
+    storage_size_gb: 32
+    storage_auto_grow: Enabled
+    # Backup
+    backup_retention_days: 14
+    geo_redundant_backup: Disabled
+    # HA
+    ha_mode: ZoneRedundant
+    # Network — VNet integrated
+    delegated_subnet_id: ref:azure_virtual_networks.spoke.subnet_ids.snet-postgres
+    private_dns_zone_id: ref:azure_private_dns_zones.postgres.id
+    public_network_access: Disabled
+    # Maintenance
+    maintenance_window:
+      custom_window: Enabled
+      day_of_week: 0
+      start_hour: 2
+      start_minute: 0
+    tags: ref:azure_resource_groups.aks_regulated.tags
+
+# ── PostgreSQL Entra Administrator ───────────────────────────────────────────
+# Grant the AKS control plane MSI as Entra admin on the PostgreSQL server.
+# Required for passwordless (Entra-only) authentication.
+azure_postgresql_flexible_server_administrators:
+  aks_cp_admin:
+    resource_group_name: ref:azure_resource_groups.aks_regulated.resource_group_name
+    server_name: psql-aks-regulated-001
+    object_id: ref:azure_user_assigned_identities.aks_control_plane.principal_id
+    principal_type: ServicePrincipal
+    principal_name: ref:azure_user_assigned_identities.aks_control_plane.name
+    tenant_id: ref:externals.azure_tenants.primary.tenant_id
+  # Grant the test app workload identity as PostgreSQL Entra admin
+  test_app_admin:
+    resource_group_name: ref:azure_resource_groups.aks_regulated.resource_group_name
+    server_name: psql-aks-regulated-001
+    object_id: ref:azure_user_assigned_identities.test_app.principal_id
+    principal_type: ServicePrincipal
+    principal_name: ref:azure_user_assigned_identities.test_app.name
+    tenant_id: ref:externals.azure_tenants.primary.tenant_id
+
+# ── Federated Identity Credential (Workload Identity for test app) ───────────
+# Links the K8s service account to the Azure UAI so pods can authenticate
+# to PostgreSQL using Entra ID without secrets.
+azure_federated_identity_credentials:
+  test_app:
+    resource_group_name: ref:azure_resource_groups.aks_regulated.resource_group_name
+    identity_name: ref:azure_user_assigned_identities.test_app.name
+    federated_credential_name: fic-test-app-postgres
+    issuer: ref:azure_managed_clusters.aks_regulated.oidc_issuer_url
+    subject: "system:serviceaccount:test-app:test-app-sa"
+
+# ── K8s Namespace for test app ───────────────────────────────────────────────
+k8s_namespaces:
+  test_app:
+    cluster: aks-regulated-001
+    name: test-app
+
+# ── K8s ServiceAccount with workload identity ────────────────────────────────
+k8s_service_accounts:
+  test_app:
+    cluster: aks-regulated-001
+    namespace: ref:k8s_namespaces.test_app.name
+    name: test-app-sa
+    labels:
+      azure.workload.identity/use: "true"
+    annotations:
+      azure.workload.identity/client-id: ref:azure_user_assigned_identities.test_app.client_id
+      azure.workload.identity/tenant-id: ref:externals.azure_tenants.primary.tenant_id
+
+# ── K8s Deployment - Test app connecting to PostgreSQL via workload identity ─
+k8s_deployments: {}
+
+# ── K8s Job — Post-deployment E2E verification ──────────────────────────────
+# Runs as a Job (not a Deployment) so Terraform waits for completion and
+# reports success/failure inline during apply.
+k8s_jobs:
+  e2e_postgres:
+    cluster: aks-regulated-001
+    namespace: ref:k8s_namespaces.test_app.name
+    name: e2e-postgres-test
+    image: mcr.microsoft.com/azure-cli:2.84.0
+    backoff_limit: 0
+    service_account_name: ref:k8s_service_accounts.test_app.name
+    pod_labels:
+      azure.workload.identity/use: "true"
+    env:
+      PGHOST: ref:azure_postgresql_flexible_servers.app_db.fqdn
+      PGUSER: ref:azure_user_assigned_identities.test_app.name
+    command:
+      - "/bin/bash"
+      - "-c"
+    args:
+      - |
+        set -e
+        echo "=== Workload Identity → PostgreSQL E2E Test ==="
+        echo "Waiting for federated token..."
+        for i in $(seq 1 60); do [ -f "$AZURE_FEDERATED_TOKEN_FILE" ] && break; sleep 2; done
+        if [ ! -f "$AZURE_FEDERATED_TOKEN_FILE" ]; then echo "FAIL: no token file"; exit 1; fi
+        echo "Logging in with workload identity..."
+        az login --federated-token "$(cat $AZURE_FEDERATED_TOKEN_FILE)" \
+          --service-principal -u $AZURE_CLIENT_ID -t $AZURE_TENANT_ID --allow-no-subscriptions
+        echo "Acquiring PostgreSQL token..."
+        export PGPASSWORD=$(az account get-access-token --resource-type oss-rdbms --query accessToken -o tsv)
+        echo "Token acquired (${#PGPASSWORD} chars)"
+        echo "Installing postgresql-client..."
+        tdnf install -y postgresql >/dev/null 2>&1
+        echo "Connecting to PostgreSQL at $PGHOST..."
+        psql "host=$PGHOST dbname=postgres user=$PGUSER sslmode=require" \
+          -c "SELECT 'E2E_OK' AS status, version();"
+        echo "=== E2E Test PASSED at $(date) ==="

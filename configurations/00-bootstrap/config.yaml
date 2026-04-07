@@ -1,0 +1,119 @@
+# ── Bootstrap: Terraform State Storage ────────────────────────────────────────
+#
+# One-time setup — creates the Azure Storage account that holds all other
+# Terraform state files. This config itself uses local state (never stored
+# in the account it creates).
+#
+# Prerequisites:
+#   - az CLI authenticated
+#   - A subscription with Contributor access
+#
+# Authentication:
+#   Handled automatically by tf.sh (acquires tokens via az CLI).
+#
+# Apply (recommended):
+#   ./tf.sh apply configurations/00-bootstrap/config.yaml
+#
+#   The script will:
+#     1. Configure local backend + terraform init
+#     2. Acquire ARM token via az CLI
+#     3. Run terraform apply
+#     4. Create the blob container if needed
+#     5. Upload .tfstate/bootstrap.tfstate to Azure Storage
+#     6. Back up local state to .tfstate/bootstrap.tfstate.bak
+#
+# Manual equivalent:
+#   export TF_VAR_azure_access_token=$(az account get-access-token \
+#     --resource https://management.azure.com --query accessToken -o tsv)
+#   export TF_VAR_subscription_id=$(az account show --query id -o tsv)
+#   terraform init -reconfigure -backend-config="path=.tfstate/bootstrap.tfstate"
+#   terraform apply -var="config_file=configurations/00-bootstrap/config.yaml"
+#
+# After manual apply (skip if using tf.sh — it handles all of this):
+#   1. Create the blob container:
+#      az storage container create --name tfstate \
+#        --account-name stdplstate001 --auth-mode login
+#   2. Upload state:
+#      az storage blob upload --account-name stdplstate001 \
+#        --container-name tfstate --name bootstrap.tfstate \
+#        --file .tfstate/bootstrap.tfstate --overwrite --auth-mode login
+#   3. Assign Storage Blob Data Contributor to operators / CI identity:
+#      az role assignment create --role "Storage Blob Data Contributor" \
+#        --assignee <principal-id> \
+#        --scope /subscriptions/$TF_VAR_subscription_id/resourceGroups/rg-terraform-state/providers/Microsoft.Storage/storageAccounts/stdplstate001
+
+# ── State backend ────────────────────────────────────────────────────────────
+# MUST use local backend — this config creates the very storage account that
+# all other configs use as their azurerm backend. Using azurerm here would
+# create a circular dependency: destroying bootstrap would delete the state
+# storage for every configuration, including itself.
+#
+# The local state file is the single source of truth for bootstrap resources.
+# Back it up after every apply:
+#   cp .tfstate/bootstrap.tfstate .tfstate/bootstrap.tfstate.bak
+terraform_backend:
+  type: local
+  path: .tfstate/bootstrap.tfstate
+  # After apply, upload local state to Azure Storage so other configs can
+  # reference it via remote_states. The script handles this automatically.
+  upload_to:
+    resource_group_name: rg-terraform-state
+    storage_account_name: stdplstate001
+    container_name: tfstate
+    key: bootstrap.tfstate
+
+# ── Resources ────────────────────────────────────────────────────────────────
+
+default_location: westeurope
+
+azure_resource_provider_registrations:
+  storage:
+    resource_provider_namespace: Microsoft.Storage
+
+azure_resource_groups:
+  tfstate:
+    resource_group_name: rg-terraform-state
+    location: westeurope
+    tags:
+      purpose: terraform-state
+      managed_by: bootstrap
+
+# ── Delete Lock — prevent accidental deletion of state infrastructure ────────
+azure_management_locks:
+  protect_tfstate:
+    resource_group_name: ref:azure_resource_groups.tfstate.resource_group_name
+    lock_name: protect-terraform-state
+    lock_level: CanNotDelete
+    notes: "Protects Terraform state storage RG from accidental deletion."
+
+# ── RBAC — grant caller Storage Blob Data Contributor on state RG ────────────
+# Scoped to the resource group (covers all storage accounts within).
+# ref:caller.object_id is auto-populated by tf.sh from az CLI context.
+azure_role_assignments:
+  caller_blob_contributor:
+    scope: ref:azure_resource_groups.tfstate.id
+    role_definition_id: "/providers/Microsoft.Authorization/roleDefinitions/ba92f5b4-2d11-453d-a403-e96b0029c9fe"
+    principal_id: ref:caller.object_id
+    principal_type: User
+    description: "Bootstrap: grants deployer Storage Blob Data Contributor for state access"
+
+azure_storage_accounts:
+  tfstate:
+    resource_group_name: ref:azure_resource_groups.tfstate.resource_group_name
+    account_name: stdplstate001
+    sku_name: Standard_GRS
+    kind: StorageV2
+    location: ref:azure_resource_groups.tfstate.location
+    minimum_tls_version: TLS1_2
+    allow_blob_public_access: false
+    allow_shared_key_access: false
+    https_traffic_only_enabled: true
+    default_to_oauth_authentication: true
+    tags: ref:azure_resource_groups.tfstate.tags
+
+# ── Blob container for Terraform state files ─────────────────────────────────
+azure_storage_account_containers:
+  tfstate:
+    resource_group_name: ref:azure_resource_groups.tfstate.resource_group_name
+    account_name: ref:azure_storage_accounts.tfstate.name
+    container_name: tfstate

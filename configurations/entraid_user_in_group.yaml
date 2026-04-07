@@ -1,0 +1,30 @@
+# Entra ID configuration — user created and added to a group.
+# Authentication — supply via environment variables:
+#   export TF_VAR_graph_access_token=$(az account get-access-token --resource https://graph.microsoft.com --query accessToken -o tsv)
+#   TF_VAR_config_file=configurations/entraid_user_in_group.yaml terraform apply
+
+entraid_groups:
+  demo:
+    display_name: tf-test-group
+    mail_enabled: false
+    mail_nickname: tf-test-group
+    security_enabled: true
+    description: "Test security group managed by Terraform"
+
+entraid_users:
+  demo:
+    display_name: TF Test User
+    mail_nickname: tf-test-user
+    user_principal_name: tf-test-user@MngEnvMCAP740140.onmicrosoft.com
+    account_enabled: true
+    password_profile:
+      password: "ChangeMe@12345!"
+      force_change_password_next_sign_in: true
+    given_name: TF
+    surname: TestUser
+    department: Engineering
+
+entraid_group_members:
+  demo_user_in_group:
+    group_id: ref:entraid_groups.demo.id
+    member_id: ref:entraid_users.demo.id

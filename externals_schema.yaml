@@ -1,0 +1,271 @@
+# ── externals schema registry ─────────────────────────────────────────────────
+# Maps externals category names to their API validation schemas.
+# Used by provider::rest::validate_externals() to validate that
+# external resources exist at plan time via read-only API GET calls.
+#
+# This file grows alongside module creation — when a new Terraform module is
+# added, a corresponding entry should be added here so that externals of that
+# type can be validated.
+#
+# Schema fields:
+#   api            : arm | graph | github — which API and token to use
+#   path           : URL path template with {attr_name} placeholders
+#   api_version    : (optional) ARM query parameter
+#   search_filter  : (optional) OData $filter template with {attr_name} placeholders
+#   operation      : (optional) human-readable label (GET by default)
+#   attributes     : "*" (any attribute allowed) or [list] of allowed attribute names.
+#                    Attributes referenced in {path} and {search_filter} are always required.
+#                    When a list is given, unknown attributes raise an error.
+# ──────────────────────────────────────────────────────────────────────────────
+
+# ── Azure Resource Manager (arm) ─────────────────────────────────────────────
+
+azure_tenants:
+  api: arm
+  path: "/tenants"
+  api_version: "2022-12-01"
+  search_filter: "tenantId eq '{tenant_id}'"
+  operation: GET (list + filter)
+  attributes: [tenant_id, domain, location]
+
+azure_subscriptions:
+  api: arm
+  path: "/subscriptions/{subscription_id}"
+  api_version: "2022-12-01"
+  operation: GET
+  attributes: [subscription_id, display_name, tenant_id]
+
+azure_resource_groups:
+  api: arm
+  path: "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}"
+  api_version: "2025-04-01"
+  operation: GET
+  attributes: [subscription_id, resource_group_name, location]
+
+azure_storage_accounts:
+  api: arm
+  path: "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Storage/storageAccounts/{account_name}"
+  api_version: "2025-08-01"
+  operation: GET
+  attributes: [subscription_id, resource_group_name, account_name, location, sku_name, kind]
+
+azure_key_vaults:
+  api: arm
+  path: "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.KeyVault/vaults/{vault_name}"
+  api_version: "2026-02-01"
+  operation: GET
+  attributes: [subscription_id, resource_group_name, vault_name, location, tenant_id]
+
+azure_virtual_networks:
+  api: arm
+  path: "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualNetworks/{virtual_network_name}"
+  api_version: "2025-05-01"
+  operation: GET
+  attributes: [subscription_id, resource_group_name, virtual_network_name, location, address_space]
+
+azure_express_route_ports:
+  api: arm
+  path: "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/ExpressRoutePorts/{port_name}"
+  api_version: "2025-05-01"
+  operation: GET
+  attributes: [subscription_id, resource_group_name, port_name, location, peering_location, bandwidth_in_gbps]
+
+azure_express_route_circuits:
+  api: arm
+  path: "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/expressRouteCircuits/{circuit_name}"
+  api_version: "2025-05-01"
+  operation: GET
+  attributes: [subscription_id, resource_group_name, circuit_name, location, service_provider_name, peering_location, bandwidth_in_mbps]
+
+azure_public_ip_addresses:
+  api: arm
+  path: "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/publicIPAddresses/{public_ip_address_name}"
+  api_version: "2025-05-01"
+  operation: GET
+  attributes: [subscription_id, resource_group_name, public_ip_address_name, location, sku_name, allocation_method]
+
+azure_user_assigned_identities:
+  api: arm
+  path: "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/{identity_name}"
+  api_version: "2023-01-31"
+  operation: GET
+  attributes: [subscription_id, resource_group_name, identity_name, location, client_id, principal_id]
+
+azure_firewalls:
+  api: arm
+  path: "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/azureFirewalls/{firewall_name}"
+  api_version: "2025-05-01"
+  operation: GET
+  attributes: [subscription_id, resource_group_name, firewall_name, location]
+
+azure_firewall_policies:
+  api: arm
+  path: "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/firewallPolicies/{firewall_policy_name}"
+  api_version: "2025-05-01"
+  operation: GET
+  attributes: [subscription_id, resource_group_name, firewall_policy_name, location]
+
+azure_virtual_wans:
+  api: arm
+  path: "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualWans/{virtual_wan_name}"
+  api_version: "2025-05-01"
+  operation: GET
+  attributes: [subscription_id, resource_group_name, virtual_wan_name, location]
+
+azure_virtual_hubs:
+  api: arm
+  path: "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualHubs/{virtual_hub_name}"
+  api_version: "2025-05-01"
+  operation: GET
+  attributes: [subscription_id, resource_group_name, virtual_hub_name, location, sku, address_prefix]
+
+azure_route_tables:
+  api: arm
+  path: "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/routeTables/{route_table_name}"
+  api_version: "2025-05-01"
+  operation: GET
+  attributes: [subscription_id, resource_group_name, route_table_name, location]
+
+azure_load_balancers:
+  api: arm
+  path: "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/loadBalancers/{load_balancer_name}"
+  api_version: "2025-05-01"
+  operation: GET
+  attributes: [subscription_id, resource_group_name, load_balancer_name, location, sku_name]
+
+azure_private_dns_zones:
+  api: arm
+  path: "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateDnsZones/{zone_name}"
+  api_version: "2024-06-01"
+  operation: GET
+  attributes: [subscription_id, resource_group_name, zone_name, location]
+
+azure_redis_enterprise_clusters:
+  api: arm
+  path: "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cache/redisEnterprise/{cluster_name}"
+  api_version: "2025-04-01"
+  operation: GET
+  attributes: [subscription_id, resource_group_name, cluster_name, location, sku_name]
+
+azure_ciam_directories:
+  api: arm
+  path: "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AzureActiveDirectory/ciamDirectories/{resource_name}"
+  api_version: "2023-05-17-preview"
+  operation: GET
+  attributes: [subscription_id, resource_group_name, resource_name, location, display_name]
+
+azure_network_managers:
+  api: arm
+  path: "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/networkManagers/{network_manager_name}"
+  api_version: "2025-05-01"
+  operation: GET
+  attributes: [subscription_id, resource_group_name, network_manager_name, location]
+
+azure_role_definitions:
+  api: arm
+  path: "/providers/Microsoft.Authorization/roleDefinitions"
+  api_version: "2022-04-01"
+  search_filter: "properties.roleName eq '{role_name}'"
+  operation: "GET (list + filter)"
+  attributes: "*"
+
+azure_billing_accounts:
+  api: arm
+  path: "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}"
+  api_version: "2024-04-01"
+  operation: GET
+  attributes: "*"
+
+azure_billing_scopes:
+  api: arm
+  path: "{billing_scope_id}"
+  api_version: "2024-04-01"
+  operation: GET
+  attributes: "*"
+
+azure_billing_role_definitions:
+  api: arm
+  path: "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingRoleDefinitions"
+  api_version: "2024-04-01"
+  search_filter: "properties.roleName eq '{role_name}'"
+  attributes: "*"
+
+azure_billing_scope_role_definitions:
+  api: arm
+  path: "{billing_scope}/billingRoleDefinitions"
+  api_version: "2024-04-01"
+  search_filter: "properties.roleName eq '{role_name}'"
+  attributes: "*"
+
+# ── Caller identity (token introspection) ────────────────────────────────────
+
+caller_context:
+  api: token_claims
+  operation: "JWT decode (no API call)"
+  attributes: "*"
+
+# ── Microsoft Graph (graph) ──────────────────────────────────────────────────
+
+entraid_me:
+  api: graph
+  path: "/v1.0/me"
+  operation: GET
+  attributes: "*"
+
+entraid_groups:
+  api: graph
+  path: "/v1.0/groups/{id}"
+  operation: GET
+  attributes: [id, display_name, mail_nickname, description]
+
+entraid_groups_by_name:
+  api: graph
+  path: "/v1.0/groups"
+  search_filter: "displayName eq '{display_name}'"
+  operation: GET (list + filter)
+  attributes: [display_name, mail_nickname, description]
+
+entraid_users:
+  api: graph
+  path: "/v1.0/users/{user_principal_name}"
+  operation: GET
+  attributes: [user_principal_name, display_name, mail, id]
+
+entraid_applications:
+  api: graph
+  path: "/v1.0/applications"
+  search_filter: "appId eq '{app_id}'"
+  operation: GET (list + filter)
+  attributes: [app_id, display_name, id]
+
+entraid_service_principals:
+  api: graph
+  path: "/v1.0/servicePrincipals/{id}"
+  operation: GET
+  attributes: [id, display_name, app_id]
+
+# ── GitHub (github) ──────────────────────────────────────────────────────────
+
+github_organizations:
+  api: github
+  path: "/orgs/{org_name}"
+  operation: GET
+  attributes: [org_name, enterprise, business_id]
+
+github_repositories:
+  api: github
+  path: "/repos/{owner}/{name}"
+  operation: GET
+  attributes: [owner, name, full_name]
+
+github_teams:
+  api: github
+  path: "/orgs/{org_name}/teams/{slug}"
+  operation: GET
+  attributes: [org_name, slug, name]
+
+github_enterprises:
+  api: github
+  path: "/enterprises/{slug}"
+  operation: GET
+  attributes: [slug, name]

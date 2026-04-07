@@ -1,0 +1,379 @@
+# ── Local Kubernetes clusters with Azure Arc enrollment ──────────────────────
+#
+# This configuration declares local K8s clusters (via kind), configures them
+# through the Kubernetes REST API, and enrolls them into Azure Arc + Entra ID.
+#
+# Prerequisites:
+#   - kind installed locally
+#   - Docker running
+#   - az CLI authenticated
+#
+# Authentication:
+#   export TF_VAR_azure_access_token=$(az account get-access-token \
+#     --resource https://management.azure.com --query accessToken -o tsv)
+#   export TF_VAR_graph_access_token=$(az account get-access-token \
+#     --resource https://graph.microsoft.com --query accessToken -o tsv)
+#   export TF_VAR_subscription_id=$(az account show --query id -o tsv)
+# #
+# # Run:
+#   terraform apply -var="config_file=configurations/k8s_arc_enrollment.yaml"
+#
+# Lifecycle:
+
+# ── State backend (read by /tfstate-boundary prompt) ─────────────────────────
+terraform_backend:
+  type: azurerm
+  key: k8s_arc_enrollment.tfstate
+  resource_group_name: rg-terraform-state
+  storage_account_name: stdplstate001
+  container_name: tfstate
+  use_azuread_auth: true
+
+# Lifecycle:
+#   1. entraid_groups            → Graph API: create Entra ID security groups
+#   2. k8s_kind_clusters         → kind creates the clusters (lifecycle management)
+#   3. k8s_namespaces            → K8s API: POST /api/v1/namespaces
+#   4. k8s_cluster_role_bindings → K8s API: POST /apis/rbac.authorization.k8s.io/v1/clusterrolebindings
+#   5. k8s_deployments           → K8s API: POST /apis/apps/v1/namespaces/{ns}/deployments
+#   6. k8s_config_maps           → K8s API: POST /api/v1/namespaces/{ns}/configmaps
+#   7. azure_arc_connected_clusters → ARM API: enroll into Azure Arc
+#   8. helm_releases             → Helm: install Arc agent on clusters
+#   9. azure_role_assignments    → ARM API: Entra ID RBAC on Arc-connected cluster
+
+# ── Entra ID groups ─────────────────────────────────────────────────────────
+
+entraid_groups:
+  k8s_platform_admins:
+    display_name: "K8s Platform Admins"
+    mail_enabled: false
+    mail_nickname: k8s-platform-admins
+    security_enabled: true
+    description: "Cluster administrators for the platform cluster"
+
+  k8s_platform_readers:
+    display_name: "K8s Platform Readers"
+    mail_enabled: false
+    mail_nickname: k8s-platform-readers
+    security_enabled: true
+    description: "Read-only access to the platform cluster"
+
+  k8s_edge_operators:
+    display_name: "K8s Edge Operators"
+    mail_enabled: false
+    mail_nickname: k8s-edge-operators
+    security_enabled: true
+    description: "Operators for edge cluster workloads"
+
+  k8s_edge_viewers:
+    display_name: "K8s Edge Viewers"
+    mail_enabled: false
+    mail_nickname: k8s-edge-viewers
+    security_enabled: true
+    description: "Read-only access to the edge cluster"
+
+# ── Cluster definitions (kind) ──────────────────────────────────────────────
+
+k8s_kind_clusters:
+  platform:
+    name: platform-cluster
+    kubernetes_version: "1.30.2"
+    networking:
+      api_server_port: 6443
+      pod_subnet: "10.244.0.0/16"
+      service_subnet: "10.96.0.0/12"
+    node_pools:
+      control_plane:
+        role: control-plane
+        count: 1
+        labels:
+          node.kubernetes.io/role: control-plane
+      system:
+        role: worker
+        count: 2
+        labels:
+          workload-type: system
+        taints:
+          - key: CriticalAddonsOnly
+            effect: NoSchedule
+      user:
+        role: worker
+        count: 3
+        labels:
+          workload-type: user
+          gpu: "false"
+
+  edge:
+    name: edge-cluster
+    kubernetes_version: "1.29.12"
+    networking:
+      api_server_port: 6444
+      pod_subnet: "10.245.0.0/16"
+      service_subnet: "10.97.0.0/12"
+    node_pools:
+      control_plane:
+        role: control-plane
+        count: 1
+      iot_workers:
+        role: worker
+        count: 2
+        labels:
+          workload-type: iot
+          edge-location: factory-floor
+
+# ── Kubernetes resources (via K8s REST API — rest provider) ───────────────
+
+k8s_namespaces:
+  # NOTE: azure-arc-release namespace is created by the Helm release
+  # (create_namespace = true) — do not define it here.
+
+  monitoring:
+    cluster: ref:k8s_kind_clusters.platform.name
+    name: monitoring
+    labels:
+      managed-by: terraform-rest
+
+  workloads:
+    cluster: ref:k8s_kind_clusters.platform.name
+    name: workloads
+    labels:
+      managed-by: terraform-rest
+      istio-injection: enabled
+
+  edge_workloads:
+    cluster: ref:k8s_kind_clusters.edge.name
+    name: edge-apps
+    labels:
+      managed-by: terraform-rest
+
+k8s_cluster_role_bindings:
+  platform_admins:
+    cluster: ref:k8s_kind_clusters.platform.name
+    name: entra-id-admins
+    role_ref:
+      kind: ClusterRole
+      name: cluster-admin
+    subjects:
+      - kind: Group
+        name: ref:entraid_groups.k8s_platform_admins.id
+        api_group: rbac.authorization.k8s.io
+
+  platform_readers:
+    cluster: ref:k8s_kind_clusters.platform.name
+    name: entra-id-readers
+    role_ref:
+      kind: ClusterRole
+      name: view
+    subjects:
+      - kind: Group
+        name: ref:entraid_groups.k8s_platform_readers.id
+        api_group: rbac.authorization.k8s.io
+
+  edge_operators:
+    cluster: ref:k8s_kind_clusters.edge.name
+    name: entra-id-edge-operators
+    role_ref:
+      kind: ClusterRole
+      name: edit
+    subjects:
+      - kind: Group
+        name: ref:entraid_groups.k8s_edge_operators.id
+        api_group: rbac.authorization.k8s.io
+
+k8s_deployments:
+  nginx_ingress:
+    cluster: ref:k8s_kind_clusters.platform.name
+    namespace: ref:k8s_namespaces.workloads.name
+    name: nginx-ingress
+    replicas: 2
+    image: registry.k8s.io/ingress-nginx/controller:v1.10.0
+    node_selector:
+      workload-type: system
+    tolerations:
+      - key: CriticalAddonsOnly
+        operator: Exists
+        effect: NoSchedule
+
+k8s_config_maps:
+  app_config:
+    cluster: ref:k8s_kind_clusters.platform.name
+    namespace: ref:k8s_namespaces.workloads.name
+    name: app-settings
+    data:
+      LOG_LEVEL: info
+      ENVIRONMENT: dev
+
+# ── TLS key pairs for Arc agent handshake ────────────────────────────────────
+
+tls_private_keys:
+  arc_platform:
+    algorithm: RSA
+    rsa_bits: 4096
+  arc_edge:
+    algorithm: RSA
+    rsa_bits: 4096
+
+# ── Azure Arc enrollment (via ARM REST API — rest provider) ───────────────
+
+azure_resource_provider_registrations:
+  kubernetes:
+    resource_provider_namespace: Microsoft.Kubernetes
+  kubernetes_configuration:
+    resource_provider_namespace: Microsoft.KubernetesConfiguration
+  containerregistry:
+    resource_provider_namespace: Microsoft.ContainerRegistry
+
+azure_resource_groups:
+  arc:
+    resource_group_name: rg-arc-clusters
+    location: westeurope
+    tags:
+      environment: dev
+      managed_by: terraform-rest
+
+# ── Azure Container Registry (private chart mirror) ─────────────────────────
+
+azure_container_registries:
+  arc:
+    resource_group_name: ref:azure_resource_groups.arc.resource_group_name
+    registry_name: acrarcagents001
+    sku_name: Standard
+    location: westeurope
+    anonymous_pull_enabled: true
+    tags: ref:azure_resource_groups.arc.tags
+
+azure_container_registry_imports:
+  arc_chart:
+    resource_group_name: ref:azure_resource_groups.arc.resource_group_name
+    registry_name: ref:azure_container_registries.arc.registry_name
+    source_registry_uri: mcr.microsoft.com
+    source_image: "azurearck8s/batch1/stable/azure-arc-k8sagents:1.33.0"
+
+# ── Azure Arc enrollment (via ARM REST API — rest provider) ───────────────
+
+azure_arc_connected_clusters:
+  platform:
+    resource_group_name: ref:azure_resource_groups.arc.resource_group_name
+    cluster_name: ref:k8s_kind_clusters.platform.name
+    location: westeurope
+    identity_type: SystemAssigned
+    distribution: kind
+    agent_public_key_certificate: ref:tls_private_keys.arc_platform.public_key_base64
+    aad_profile:
+      enable_azure_rbac: true
+      admin_group_object_ids:
+        - ref:entraid_groups.k8s_platform_admins.id
+    tags: ref:azure_resource_groups.arc.tags
+
+  edge:
+    resource_group_name: ref:azure_resource_groups.arc.resource_group_name
+    cluster_name: ref:k8s_kind_clusters.edge.name
+    location: westeurope
+    identity_type: SystemAssigned
+    distribution: kind
+    agent_public_key_certificate: ref:tls_private_keys.arc_edge.public_key_base64
+    aad_profile:
+      enable_azure_rbac: true
+      admin_group_object_ids:
+        - ref:entraid_groups.k8s_edge_operators.id
+    tags: ref:azure_resource_groups.arc.tags
+
+# ── Azure Arc agent Helm releases ────────────────────────────────────────────
+# Installs the Arc agent on each cluster via OCI Helm chart from MCR.
+# The _arc_cluster_key links to tls_private_key.arc_agent[key] for onboarding.
+
+helm_releases:
+  arc_agent_platform:
+    cluster: ref:k8s_kind_clusters.platform.name
+    name: azure-arc
+    namespace: azure-arc-release
+    chart: oci://acrarcagents001.azurecr.io/azurearck8s/batch1/stable/azure-arc-k8sagents
+    chart_version: "1.33.0"
+    wait: false
+    timeout: 1200
+    set:
+      global.subscriptionId: ref:azure_arc_connected_clusters.platform.subscription_id
+      global.resourceGroupName: ref:azure_arc_connected_clusters.platform.resource_group_name
+      global.resourceName: ref:azure_arc_connected_clusters.platform.cluster_name
+      global.location: ref:azure_arc_connected_clusters.platform.location
+      global.tenantId: ref:azure_arc_connected_clusters.platform.tenant_id
+      global.kubernetesDistro: kind
+      global.kubernetesInfra: generic
+      global.azureEnvironment: AZUREPUBLICCLOUD
+      systemDefaultValues.spnOnboarding: "false"
+      systemDefaultValues.clusterconnect-agent.enabled: "true"
+    _tls_key_refs:
+      global.onboardingPrivateKey: arc_platform
+
+  arc_agent_edge:
+    cluster: ref:k8s_kind_clusters.edge.name
+    name: azure-arc
+    namespace: azure-arc-release
+    chart: oci://acrarcagents001.azurecr.io/azurearck8s/batch1/stable/azure-arc-k8sagents
+    chart_version: "1.33.0"
+    wait: false
+    timeout: 1200
+    set:
+      global.subscriptionId: ref:azure_arc_connected_clusters.edge.subscription_id
+      global.resourceGroupName: ref:azure_arc_connected_clusters.edge.resource_group_name
+      global.resourceName: ref:azure_arc_connected_clusters.edge.cluster_name
+      global.location: ref:azure_arc_connected_clusters.edge.location
+      global.tenantId: ref:azure_arc_connected_clusters.edge.tenant_id
+      global.kubernetesDistro: kind
+      global.kubernetesInfra: generic
+      global.azureEnvironment: AZUREPUBLICCLOUD
+      systemDefaultValues.spnOnboarding: "false"
+      systemDefaultValues.clusterconnect-agent.enabled: "true"
+    _tls_key_refs:
+      global.onboardingPrivateKey: arc_edge
+
+# ── Azure Arc Kubernetes Extensions (PARKED — roadmap) ───────────────────────
+# Blocked: Azure Monitor Pipeline Extension requires amd64 nodes but local
+# kind clusters run on arm64 (Apple Silicon). Re-enable when deploying to
+# amd64 clusters or when Microsoft ships arm64 images.
+#
+# azure_arc_kubernetes_extensions:
+#   monitor_pipeline_edge:
+#     resource_group_name: ref:azure_resource_groups.arc.resource_group_name
+#     cluster_name: ref:k8s_kind_clusters.edge.name
+#     extension_name: azuremonitor-pipeline
+#     extension_type: microsoft.monitor.pipelinecontroller
+#     release_train: Preview
+#     scope:
+#       cluster:
+#         release_namespace: kube-system
+
+# ── External role definitions (resolved at plan time via ARM API) ────────────
+
+externals:
+  azure_role_definitions:
+    arc_cluster_admin:
+      role_name: "Azure Arc Kubernetes Cluster Admin"
+    arc_cluster_viewer:
+      role_name: "Azure Arc Kubernetes Viewer"
+
+# ── Entra ID RBAC on Arc-connected clusters ─────────────────────────────────
+
+azure_role_assignments:
+  arc_platform_admin:
+    scope: ref:azure_arc_connected_clusters.platform.id
+    role_definition_id: ref:externals.azure_role_definitions.arc_cluster_admin.id
+    principal_id: ref:entraid_groups.k8s_platform_admins.id
+    principal_type: Group
+
+  arc_platform_reader:
+    scope: ref:azure_arc_connected_clusters.platform.id
+    role_definition_id: ref:externals.azure_role_definitions.arc_cluster_viewer.id
+    principal_id: ref:entraid_groups.k8s_platform_readers.id
+    principal_type: Group
+
+  arc_edge_operator:
+    scope: ref:azure_arc_connected_clusters.edge.id
+    role_definition_id: ref:externals.azure_role_definitions.arc_cluster_admin.id
+    principal_id: ref:entraid_groups.k8s_edge_operators.id
+    principal_type: Group
+
+  arc_edge_viewer:
+    scope: ref:azure_arc_connected_clusters.edge.id
+    role_definition_id: ref:externals.azure_role_definitions.arc_cluster_viewer.id
+    principal_id: ref:entraid_groups.k8s_edge_viewers.id
+    principal_type: Group

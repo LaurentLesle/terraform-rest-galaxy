@@ -1,0 +1,42 @@
+# Entra ID group with Storage Blob Data Contributor role on a storage account.
+#
+# This configuration deploys:
+#   - Resource group
+#   - Storage account
+#   - Entra ID security group
+#   - Role assignment: "Storage Blob Data Contributor" for the group on the storage account
+#
+# Prerequisites:
+#   export TF_VAR_access_token=$(az account get-access-token --resource https://management.azure.com --query accessToken -o tsv)
+#   export TF_VAR_graph_access_token=$(az account get-access-token --resource https://graph.microsoft.com --query accessToken -o tsv)
+#   TF_VAR_config_file=configurations/entraid_group_storage_rbac.yaml terraform apply
+
+azure_resource_groups:
+  rbac_demo:
+    resource_group_name: rg-rbac-demo
+    location: westeurope
+
+azure_storage_accounts:
+  rbac_demo:
+    resource_group_name: ref:azure_resource_groups.rbac_demo.resource_group_name
+    account_name: sarbac281977
+    location: ref:azure_resource_groups.rbac_demo.location
+    sku_name: Standard_LRS
+    kind: StorageV2
+
+entraid_groups:
+  blob_contributors:
+    display_name: tf-blob-contributors
+    mail_enabled: false
+    mail_nickname: tf-blob-contributors
+    security_enabled: true
+    description: "Members of this group have Storage Blob Data Contributor access"
+
+azure_role_assignments:
+  group_blob_contributor:
+    scope: ref:azure_resource_groups.rbac_demo.id
+    # Storage Blob Data Contributor built-in role definition ID
+    role_definition_id: /providers/Microsoft.Authorization/roleDefinitions/ba92f5b4-2d11-453d-a403-e96b0029c9fe
+    principal_id: ref:entraid_groups.blob_contributors.id
+    principal_type: Group
+    description: "Grant Storage Blob Data Contributor to tf-blob-contributors group on the resource group"

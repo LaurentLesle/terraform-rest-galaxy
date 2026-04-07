@@ -1,0 +1,137 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		// ── terraform test (native .tftest.hcl) ────────────────────────────────
+		{
+			"label": "terraform test: all",
+			"type": "shell",
+			"command": "export TF_VAR_azure_access_token=$(az account get-access-token --resource https://management.azure.com --query accessToken -o tsv) && export TF_VAR_subscription_id=$(az account show --query id -o tsv) && export TF_VAR_resource_group_name=test-rg-rest-tftest && echo \"Token acquired for subscription $TF_VAR_subscription_id\" && az group create --name $TF_VAR_resource_group_name --location westeurope --subscription $TF_VAR_subscription_id -o table && terraform init -backend=false && terraform test -test-directory=tests/azure; EXIT=$?; az group delete --name $TF_VAR_resource_group_name --subscription $TF_VAR_subscription_id --yes --no-wait; exit $EXIT",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": {
+				"kind": "test",
+				"isDefault": true
+			},
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"clear": true
+			}
+		},
+		{
+			"label": "terraform test: resource_group",
+			"type": "shell",
+			"command": "export TF_VAR_azure_access_token=$(az account get-access-token --resource https://management.azure.com --query accessToken -o tsv) && export TF_VAR_subscription_id=$(az account show --query id -o tsv) && echo \"Token acquired for subscription $TF_VAR_subscription_id\" && terraform init -backend=false && terraform test -test-directory=tests/azure -filter=tests/azure/resource_group.tftest.hcl",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test",
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"clear": true
+			}
+		},
+		{
+			"label": "terraform test: storage_account",
+			"type": "shell",
+			"command": "export TF_VAR_azure_access_token=$(az account get-access-token --resource https://management.azure.com --query accessToken -o tsv) && export TF_VAR_subscription_id=$(az account show --query id -o tsv) && export TF_VAR_resource_group_name=test-rg-rest-tftest && echo \"Token acquired for subscription $TF_VAR_subscription_id\" && az group create --name $TF_VAR_resource_group_name --location westeurope --subscription $TF_VAR_subscription_id -o table && terraform init -backend=false && terraform test -test-directory=tests/azure -filter=tests/azure/storage_account.tftest.hcl; EXIT=$?; az group delete --name $TF_VAR_resource_group_name --subscription $TF_VAR_subscription_id --yes --no-wait; exit $EXIT",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test",
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"clear": true
+			}
+		},
+		// ── example smoke tests (plan / apply+destroy) ─────────────────────────
+		{
+			"label": "tf-test: resource_group minimum",
+			"type": "shell",
+			"command": "export TF_VAR_azure_access_token=$(az account get-access-token --resource https://management.azure.com --query accessToken -o tsv) && export TF_VAR_subscription_id=$(az account show --query id -o tsv) && echo \"Token acquired for subscription $TF_VAR_subscription_id\" && terraform -chdir=examples/azure/resource_group/minimum init -backend=false && terraform -chdir=examples/azure/resource_group/minimum plan -var='resource_group_name=test-rg' -var='location=westeurope'",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "tf-test: resource_group apply+destroy",
+			"type": "shell",
+			"command": "export TF_VAR_azure_access_token=$(az account get-access-token --resource https://management.azure.com --query accessToken -o tsv) && export TF_VAR_subscription_id=$(az account show --query id -o tsv) && echo \"=== Token acquired for subscription $TF_VAR_subscription_id ===\" && terraform -chdir=examples/azure/resource_group/minimum init -backend=false && echo '=== APPLY ===' && terraform -chdir=examples/azure/resource_group/minimum apply -auto-approve -var='resource_group_name=test-rg-rest-skill' -var='location=westeurope' && echo '=== DESTROY ===' && terraform -chdir=examples/azure/resource_group/minimum destroy -auto-approve -var='resource_group_name=test-rg-rest-skill' -var='location=westeurope'",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "tf-test: storage_account minimum",
+			"type": "shell",
+			"command": "export TF_VAR_azure_access_token=$(az account get-access-token --resource https://management.azure.com --query accessToken -o tsv) && export TF_VAR_subscription_id=$(az account show --query id -o tsv) && echo \"Token acquired for subscription $TF_VAR_subscription_id\" && terraform -chdir=examples/azure/storage_account/minimum init -backend=false && terraform -chdir=examples/azure/storage_account/minimum plan -var='resource_group_name=test-rg' -var='account_name=tfrslsatest001' -var='sku_name=Standard_LRS' -var='kind=StorageV2' -var='location=westeurope'",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "tf-test: storage_account apply+destroy",
+			"type": "shell",
+			"command": "export TF_VAR_azure_access_token=$(az account get-access-token --resource https://management.azure.com --query accessToken -o tsv) && export TF_VAR_subscription_id=$(az account show --query id -o tsv) && echo \"=== Token acquired for subscription $TF_VAR_subscription_id ===\" && echo '=== Ensuring resource group exists ===' && az group create --name test-rg-rest-skill --location westeurope --subscription $TF_VAR_subscription_id -o table && terraform -chdir=examples/azure/storage_account/minimum init -backend=false && echo '=== APPLY ===' && terraform -chdir=examples/azure/storage_account/minimum apply -auto-approve -var='resource_group_name=test-rg-rest-skill' -var='account_name=tfrslsatest001' -var='sku_name=Standard_LRS' -var='kind=StorageV2' -var='location=westeurope' && echo '=== DESTROY ===' && terraform -chdir=examples/azure/storage_account/minimum destroy -auto-approve -var='resource_group_name=test-rg-rest-skill' -var='account_name=tfrslsatest001' -var='sku_name=Standard_LRS' -var='kind=StorageV2' -var='location=westeurope' && echo '=== Deleting resource group ===' && az group delete --name test-rg-rest-skill --subscription $TF_VAR_subscription_id --yes --no-wait && echo '=== Done ==='",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "tf-test: resource_group minimum",
+			"type": "shell",
+			"command": "export TF_VAR_azure_access_token=$(az account get-access-token --resource https://management.azure.com --query accessToken -o tsv) && export TF_VAR_subscription_id=$(az account show --query id -o tsv) && echo \"Token acquired for subscription $TF_VAR_subscription_id\" && terraform -chdir=examples/azure/resource_group/minimum init -backend=false && terraform -chdir=examples/azure/resource_group/minimum plan -var='resource_group_name=test-rg' -var='location=westeurope'",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "tf-test: resource_group apply+destroy",
+			"type": "shell",
+			"command": "export TF_VAR_azure_access_token=$(az account get-access-token --resource https://management.azure.com --query accessToken -o tsv) && export TF_VAR_subscription_id=$(az account show --query id -o tsv) && echo \"=== Token acquired for subscription $TF_VAR_subscription_id ===\" && terraform -chdir=examples/azure/resource_group/minimum init -backend=false && echo '=== APPLY ===' && terraform -chdir=examples/azure/resource_group/minimum apply -auto-approve -var='resource_group_name=test-rg-rest-skill' -var='location=westeurope' && echo '=== DESTROY ===' && terraform -chdir=examples/azure/resource_group/minimum destroy -auto-approve -var='resource_group_name=test-rg-rest-skill' -var='location=westeurope'",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "tf-test: storage_account minimum",
+			"type": "shell",
+			"command": "export TF_VAR_azure_access_token=$(az account get-access-token --resource https://management.azure.com --query accessToken -o tsv) && export TF_VAR_subscription_id=$(az account show --query id -o tsv) && echo \"Token acquired for subscription $TF_VAR_subscription_id\" && terraform -chdir=examples/azure/storage_account/minimum init -backend=false && terraform -chdir=examples/azure/storage_account/minimum plan -var='resource_group_name=test-rg' -var='account_name=tfrslsatest001' -var='sku_name=Standard_LRS' -var='kind=StorageV2' -var='location=westeurope'",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "tf-test: storage_account apply+destroy",
+			"type": "shell",
+			"command": "export TF_VAR_azure_access_token=$(az account get-access-token --resource https://management.azure.com --query accessToken -o tsv) && export TF_VAR_subscription_id=$(az account show --query id -o tsv) && echo \"=== Token acquired for subscription $TF_VAR_subscription_id ===\" && echo '=== Creating resource group ===' && az group create --name test-rg-rest-skill --location westeurope --subscription $TF_VAR_subscription_id -o table && terraform -chdir=examples/azure/storage_account/minimum init -backend=false && echo '=== APPLY ===' && terraform -chdir=examples/azure/storage_account/minimum apply -auto-approve -var='resource_group_name=test-rg-rest-skill' -var='account_name=tfrslsatest001' -var='sku_name=Standard_LRS' -var='kind=StorageV2' -var='location=westeurope' && echo '=== DESTROY ===' && terraform -chdir=examples/azure/storage_account/minimum destroy -auto-approve -var='resource_group_name=test-rg-rest-skill' -var='account_name=tfrslsatest001' -var='sku_name=Standard_LRS' -var='kind=StorageV2' -var='location=westeurope' && echo '=== Deleting resource group ===' && az group delete --name test-rg-rest-skill --subscription $TF_VAR_subscription_id --yes --no-wait && echo '=== Done ===' ",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "tf-test: storage_account apply+destroy",
+			"type": "shell",
+			"command": "export TF_VAR_azure_access_token=$(az account get-access-token --resource https://management.azure.com --query accessToken -o tsv) && export TF_VAR_subscription_id=$(az account show --query id -o tsv) && echo \"=== Token acquired for subscription $TF_VAR_subscription_id ===\" && echo '=== Ensuring resource group exists ===' && az group create --name test-rg-rest-skill --location westeurope --subscription $TF_VAR_subscription_id -o table && terraform -chdir=examples/azure/storage_account/minimum init -backend=false && echo '=== APPLY ===' && terraform -chdir=examples/azure/storage_account/minimum apply -auto-approve -var='resource_group_name=test-rg-rest-skill' -var='account_name=tfrslsatest001' -var='sku_name=Standard_LRS' -var='kind=StorageV2' -var='location=westeurope' && echo '=== DESTROY ===' && terraform -chdir=examples/azure/storage_account/minimum destroy -auto-approve -var='resource_group_name=test-rg-rest-skill' -var='account_name=tfrslsatest001' -var='sku_name=Standard_LRS' -var='kind=StorageV2' -var='location=westeurope' && echo '=== Deleting resource group ===' && az group delete --name test-rg-rest-skill --subscription $TF_VAR_subscription_id --yes --no-wait && echo '=== Done ==='",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "tf-test: storage_account apply+destroy",
+			"type": "shell",
+			"command": "export TF_VAR_azure_access_token=$(az account get-access-token --resource https://management.azure.com --query accessToken -o tsv) && export TF_VAR_subscription_id=$(az account show --query id -o tsv) && echo \"=== Token acquired for subscription $TF_VAR_subscription_id ===\" && echo '=== Ensuring resource group exists ===' && az group create --name test-rg-rest-skill --location westeurope --subscription $TF_VAR_subscription_id -o table && terraform -chdir=examples/azure/storage_account/minimum init -backend=false && echo '=== APPLY ===' && terraform -chdir=examples/azure/storage_account/minimum apply -auto-approve -var='resource_group_name=test-rg-rest-skill' -var='account_name=tfrslsatest001' -var='sku_name=Standard_LRS' -var='kind=StorageV2' -var='location=westeurope' && echo '=== DESTROY ===' && terraform -chdir=examples/azure/storage_account/minimum destroy -auto-approve -var='resource_group_name=test-rg-rest-skill' -var='account_name=tfrslsatest001' -var='sku_name=Standard_LRS' -var='kind=StorageV2' -var='location=westeurope' && echo '=== Deleting resource group ===' && az group delete --name test-rg-rest-skill --subscription $TF_VAR_subscription_id --yes --no-wait && echo '=== Done ==='",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "tf-test: storage_account apply+destroy",
+			"type": "shell",
+			"command": "export TF_VAR_azure_access_token=$(az account get-access-token --resource https://management.azure.com --query accessToken -o tsv) && export TF_VAR_subscription_id=$(az account show --query id -o tsv) && echo \"=== Token acquired for subscription $TF_VAR_subscription_id ===\" && terraform -chdir=examples/azure/storage_account/minimum init -backend=false && echo '=== APPLY ===' && terraform -chdir=examples/azure/storage_account/minimum apply -auto-approve -var='resource_group_name=test-rg-rest-skill' -var='account_name=tfrslsatest001' -var='sku_name=Standard_LRS' -var='kind=StorageV2' -var='location=westeurope' && echo '=== DESTROY ===' && terraform -chdir=examples/azure/storage_account/minimum destroy -auto-approve -var='resource_group_name=test-rg-rest-skill' -var='account_name=tfrslsatest001' -var='sku_name=Standard_LRS' -var='kind=StorageV2' -var='location=westeurope' && echo '=== Deleting resource group ===' && az group delete --name test-rg-rest-skill --subscription $TF_VAR_subscription_id --yes --no-wait && echo '=== Done ==='",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		}
+	]
+}

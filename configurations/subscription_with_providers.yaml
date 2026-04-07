@@ -1,0 +1,106 @@
+# Subscription with Resource Provider Registrations, Features, and CMK Storage
+#
+# This configuration deploys:
+#   - Subscription (via alias)
+#   - Resource provider registrations (e.g. Microsoft.Compute, Microsoft.KeyVault, Microsoft.Storage)
+#   - Resource provider features (selectively enable specific provider features)
+#   - Resource group
+#   - User-assigned managed identity (for storage → key vault access)
+#   - Key vault with RBAC authorization and purge protection
+#   - Key vault key (RSA 2048)
+#   - Role assignment: "Key Vault Crypto User" for the identity on the vault
+#   - Storage account with CMK encryption using the above key + identity
+#
+# When a resource provider is registered without specifying individual features,
+# all features are enabled by default (standard Azure behavior). Use the
+# azure_resource_provider_features section to selectively enable specific features.
+#
+# Prerequisites:
+#   export TF_VAR_access_token=$(az account get-access-token --resource https://management.azure.com --query accessToken -o tsv)
+#   TF_VAR_config_file=configurations/subscription_with_providers.yaml terraform apply
+
+default_location: westeurope
+
+azure_subscriptions:
+  dev:
+    # tenant_id:
+    display_name: "Development Subscription"
+    billing_scope: "/billingAccounts/01c4287d-052b-4645-a456-7311137dfa03:63cd424a-4af6-415d-a4dc-5cdc9302af95_2019-05-31/billingProfiles/S7D7-MVDN-BG7-PGB/invoiceSections/725c738a-cadb-4e67-8a8c-8d2c86fdb32d"
+    workload: DevTest
+
+azure_resource_provider_registrations:
+  compute:
+    subscription_id: ref:azure_subscriptions.dev.subscription_id
+    resource_provider_namespace: Microsoft.Compute
+  keyvault:
+    subscription_id: ref:azure_subscriptions.dev.subscription_id
+    resource_provider_namespace: Microsoft.KeyVault
+  storage:
+    subscription_id: ref:azure_subscriptions.dev.subscription_id
+    resource_provider_namespace: Microsoft.Storage
+  managedidentity:
+    subscription_id: ref:azure_subscriptions.dev.subscription_id
+    resource_provider_namespace: Microsoft.ManagedIdentity
+
+azure_resource_provider_features:
+  encryption_at_host:
+    subscription_id: ref:azure_subscriptions.dev.subscription_id
+    provider_namespace: Microsoft.Compute
+    feature_name: EncryptionAtHost
+
+azure_resource_groups:
+  dev:
+    subscription_id: ref:azure_subscriptions.dev.subscription_id
+    resource_group_name: rg-sub-dev
+    location: westeurope
+
+azure_user_assigned_identities:
+  cmk_sa:
+    subscription_id: ref:azure_subscriptions.dev.subscription_id
+    resource_group_name: ref:azure_resource_groups.dev.resource_group_name
+    identity_name: id-sub-cmk-sa
+    location: ref:azure_resource_groups.dev.location
+
+azure_key_vaults:
+  cmk:
+    subscription_id: ref:azure_subscriptions.dev.subscription_id
+    resource_group_name: ref:azure_resource_groups.dev.resource_group_name
+    vault_name: kv-sub-cmk
+    location: ref:azure_resource_groups.dev.location
+    enable_rbac_authorization: true
+    enable_purge_protection: true
+
+azure_key_vault_keys:
+  cmk_sa:
+    subscription_id: ref:azure_subscriptions.dev.subscription_id
+    resource_group_name: ref:azure_resource_groups.dev.resource_group_name
+    vault_name: ref:azure_key_vaults.cmk.name
+    key_name: cmk-storage
+    key_type: RSA
+    key_size: 2048
+
+azure_role_assignments:
+  cmk_sa_crypto_user:
+    subscription_id: ref:azure_subscriptions.dev.subscription_id
+    scope: ref:azure_key_vaults.cmk.id
+    # Key Vault Crypto User built-in role definition ID
+    role_definition_id: /providers/Microsoft.Authorization/roleDefinitions/12338af0-0e69-4776-bea7-57ae8d297424
+    principal_id: ref:azure_user_assigned_identities.cmk_sa.principal_id
+    principal_type: ServicePrincipal
+
+azure_storage_accounts:
+  dev:
+    subscription_id: ref:azure_subscriptions.dev.subscription_id
+    resource_group_name: ref:azure_resource_groups.dev.resource_group_name
+    account_name: sasub001
+    location: ref:azure_resource_groups.dev.location
+    sku_name: Standard_LRS
+    kind: StorageV2
+    identity_type: UserAssigned
+    identity_user_assigned_identity_ids:
+      - ref:azure_user_assigned_identities.cmk_sa.id
+    encryption_key_source: Microsoft.Keyvault
+    encryption_key_vault_uri: ref:azure_key_vaults.cmk.vault_uri
+    encryption_key_name: ref:azure_key_vault_keys.cmk_sa.name
+    encryption_identity: ref:azure_user_assigned_identities.cmk_sa.id
+

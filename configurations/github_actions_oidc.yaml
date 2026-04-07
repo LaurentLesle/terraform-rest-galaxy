@@ -1,0 +1,95 @@
+# ── GitHub Actions OIDC for CI/CD ────────────────────────────────────────────
+#
+# Deploys the identity foundation for GitHub Actions → Azure OIDC authentication:
+#   - Resource group for the managed identity
+#   - User-assigned managed identity (GitHub Actions authenticates as this)
+#   - Federated identity credentials (OIDC trust for main branch + pull requests)
+#   - Contributor role assignment on the subscription
+#
+# After apply, the GitHub Actions secrets are set automatically via Terraform.
+# Your workflows use ${{ secrets.AZURE_CLIENT_ID }}, ${{ secrets.AZURE_TENANT_ID }},
+# and ${{ secrets.AZURE_SUBSCRIPTION_ID }}.
+#
+# Prerequisites:
+#   export TF_VAR_azure_access_token=$(az account get-access-token \
+#     --resource https://management.azure.com --query accessToken -o tsv)
+#   export TF_VAR_subscription_id=$(az account show --query id -o tsv)
+#   export TF_VAR_github_token=$(gh auth token)
+#
+#   terraform init -backend=false
+#   terraform apply -var="config_file=configurations/github_actions_oidc.yaml"
+#
+# ── REPLACE placeholders ─────────────────────────────────────────────────────
+# Before applying, replace the following:
+#   REPLACE_WITH_SUBSCRIPTION_ID → your Azure subscription ID (e.g. az account show --query id -o tsv)
+
+# ── State backend ────────────────────────────────────────────────────────────
+terraform_backend:
+  type: azurerm
+  resource_group_name: rg-terraform-state
+  storage_account_name: stdplstate001
+  container_name: tfstate
+  key: github_actions_oidc.tfstate
+
+# ── Resources ────────────────────────────────────────────────────────────────
+
+azure_resource_groups:
+  github_oidc:
+    resource_group_name: rg-github-oidc
+    location: westeurope
+    tags:
+      purpose: github-actions-oidc
+      managed_by: terraform
+
+azure_user_assigned_identities:
+  github_actions:
+    resource_group_name: ref:azure_resource_groups.github_oidc.resource_group_name
+    identity_name: id-github-actions
+    location: ref:azure_resource_groups.github_oidc.location
+    tags:
+      purpose: github-actions-oidc
+
+azure_federated_identity_credentials:
+  github_main:
+    resource_group_name: ref:azure_resource_groups.github_oidc.resource_group_name
+    identity_name: ref:azure_user_assigned_identities.github_actions.name
+    federated_credential_name: github-oidc-main
+    issuer: "https://token.actions.githubusercontent.com"
+    subject: "repo:LaurentLesle/terraform-rest-galaxy:ref:refs/heads/main"
+    audiences:
+      - "api://AzureADTokenExchange"
+  github_pr:
+    resource_group_name: ref:azure_resource_groups.github_oidc.resource_group_name
+    identity_name: ref:azure_user_assigned_identities.github_actions.name
+    federated_credential_name: github-oidc-pr
+    issuer: "https://token.actions.githubusercontent.com"
+    subject: "repo:LaurentLesle/terraform-rest-galaxy:pull_request"
+    audiences:
+      - "api://AzureADTokenExchange"
+
+azure_role_assignments:
+  github_actions_contributor:
+    # Contributor at subscription scope — replace with your subscription ID
+    scope: "/subscriptions/dd00b1a5-4c67-43da-931a-31a1432b3a20"
+    # Contributor built-in role definition ID
+    role_definition_id: /providers/Microsoft.Authorization/roleDefinitions/b24988ac-6180-42a0-ab88-20f7382dd24c
+    principal_id: ref:azure_user_assigned_identities.github_actions.principal_id
+    principal_type: ServicePrincipal
+    description: "Grant Contributor to GitHub Actions managed identity on the subscription"
+
+github_repository_secrets:
+  azure_client_id:
+    owner: LaurentLesle
+    repo: terraform-rest-galaxy
+    secret_name: AZURE_CLIENT_ID
+    plaintext_value: ref:azure_user_assigned_identities.github_actions.client_id
+  azure_tenant_id:
+    owner: LaurentLesle
+    repo: terraform-rest-galaxy
+    secret_name: AZURE_TENANT_ID
+    plaintext_value: ref:azure_user_assigned_identities.github_actions.tenant_id
+  azure_subscription_id:
+    owner: LaurentLesle
+    repo: terraform-rest-galaxy
+    secret_name: AZURE_SUBSCRIPTION_ID
+    plaintext_value: ref:caller.subscription_id

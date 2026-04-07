@@ -1,0 +1,152 @@
+# ── Acme IPAM — Centralised IP Address Governance ────────────────────────────
+#
+# Tracks all hub + VNet CIDRs via Azure IPAM pools under a Network Manager.
+# Static CIDR reservations prevent overlap for vWAN hubs and VNets.
+#
+# Pool hierarchy:
+#   pool-acme-root  (10.0.0.0/8)
+#     ├── pool-acme-hubs   (10.0.0.0/16)   → hub CIDRs as static reservations
+#     └── pool-acme-vnets  (10.10.0.0/14)  → VNet CIDRs as static reservations
+#
+# Use: TF_VAR_config_file=configurations/acme_ipam.yaml terraform plan
+
+# ==============================================================================
+# Resource Groups
+# ==============================================================================
+azure_resource_groups:
+  networking-uswest:
+    resource_group_name: rg-acme-networking-uswest
+    location: westus
+    tags:
+      environment: production
+      managed_by: acme
+      purpose: networking
+
+# ==============================================================================
+# Network Manager
+# ==============================================================================
+azure_network_managers:
+  acme:
+    resource_group_name: ref:azure_resource_groups.networking-uswest.resource_group_name
+    network_manager_name: nm-acme
+    location: ref:azure_resource_groups.networking-uswest.location
+    scope_accesses:
+      - Connectivity
+    description: "Acme network IPAM — centralised CIDR governance"
+    tags:
+      environment: production
+      managed_by: acme
+
+# ==============================================================================
+# IPAM Pools  (root + 2 child pools)
+# ==============================================================================
+azure_ipam_pools:
+  # Root pool — entire Acme supernet
+  root:
+    resource_group_name: ref:azure_resource_groups.networking-uswest.resource_group_name
+    network_manager_name: ref:azure_network_managers.acme.name
+    pool_name: pool-acme-root
+    location: ref:azure_resource_groups.networking-uswest.location
+    address_prefixes:
+      - "10.0.0.0/8"
+    description: "Acme supernet — all Azure + on-prem ranges"
+    tags:
+      environment: production
+      managed_by: acme
+
+  # Child pool — hub address space
+  hubs:
+    resource_group_name: ref:azure_resource_groups.networking-uswest.resource_group_name
+    network_manager_name: ref:azure_network_managers.acme.name
+    pool_name: pool-acme-hubs
+    location: ref:azure_resource_groups.networking-uswest.location
+    parent_pool_name: pool-acme-root
+    address_prefixes:
+      - "10.0.0.0/16"
+    description: "vWAN hub CIDRs"
+    tags:
+      environment: production
+      managed_by: acme
+
+  # Child pool — VNet address space
+  vnets:
+    resource_group_name: ref:azure_resource_groups.networking-uswest.resource_group_name
+    network_manager_name: ref:azure_network_managers.acme.name
+    pool_name: pool-acme-vnets
+    location: ref:azure_resource_groups.networking-uswest.location
+    parent_pool_name: pool-acme-root
+    address_prefixes:
+      - "10.10.0.0/14"
+    description: "Virtual network CIDRs"
+    tags:
+      environment: production
+      managed_by: acme
+
+# ==============================================================================
+# IPAM Static CIDRs  (reservations for hubs + VNets)
+# ==============================================================================
+azure_ipam_static_cidrs:
+  # ── Hub reservations ──
+  hub1-uswest:
+    resource_group_name: ref:azure_resource_groups.networking-uswest.resource_group_name
+    network_manager_name: ref:azure_network_managers.acme.name
+    pool_name: ref:azure_ipam_pools.hubs.name
+    static_cidr_name: hub1-uswest
+    address_prefixes:
+      - "10.1.0.0/24"
+    description: "vhub-acme-uswest-01"
+
+  hub2-uswest:
+    resource_group_name: ref:azure_resource_groups.networking-uswest.resource_group_name
+    network_manager_name: ref:azure_network_managers.acme.name
+    pool_name: ref:azure_ipam_pools.hubs.name
+    static_cidr_name: hub2-uswest
+    address_prefixes:
+      - "10.2.0.0/24"
+    description: "vhub-acme-uswest-02"
+
+  hub3-israelcentral:
+    resource_group_name: ref:azure_resource_groups.networking-uswest.resource_group_name
+    network_manager_name: ref:azure_network_managers.acme.name
+    pool_name: ref:azure_ipam_pools.hubs.name
+    static_cidr_name: hub3-israelcentral
+    address_prefixes:
+      - "10.3.0.0/24"
+    description: "vhub-acme-israelcentral-01"
+
+  hub4-israelcentral:
+    resource_group_name: ref:azure_resource_groups.networking-uswest.resource_group_name
+    network_manager_name: ref:azure_network_managers.acme.name
+    pool_name: ref:azure_ipam_pools.hubs.name
+    static_cidr_name: hub4-israelcentral
+    address_prefixes:
+      - "10.4.0.0/24"
+    description: "vhub-acme-israelcentral-02"
+
+  # ── VNet reservations ──
+  vnet-pe1-israelcentral:
+    resource_group_name: ref:azure_resource_groups.networking-uswest.resource_group_name
+    network_manager_name: ref:azure_network_managers.acme.name
+    pool_name: ref:azure_ipam_pools.vnets.name
+    static_cidr_name: vnet-pe1-israelcentral
+    address_prefixes:
+      - "10.10.0.0/16"
+    description: "vnet-acme-pe1-israelcentral"
+
+  vnet-ergw-israelcentral:
+    resource_group_name: ref:azure_resource_groups.networking-uswest.resource_group_name
+    network_manager_name: ref:azure_network_managers.acme.name
+    pool_name: ref:azure_ipam_pools.vnets.name
+    static_cidr_name: vnet-ergw-israelcentral
+    address_prefixes:
+      - "10.11.0.0/16"
+    description: "vnet-acme-ergw-israelcentral"
+
+  vnet-pe2-israelcentral:
+    resource_group_name: ref:azure_resource_groups.networking-uswest.resource_group_name
+    network_manager_name: ref:azure_network_managers.acme.name
+    pool_name: ref:azure_ipam_pools.vnets.name
+    static_cidr_name: vnet-pe2-israelcentral
+    address_prefixes:
+      - "10.12.0.0/16"
+    description: "vnet-acme-pe2-israelcentral"

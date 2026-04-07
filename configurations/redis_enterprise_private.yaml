@@ -1,0 +1,179 @@
+# Redis Enterprise with Private Endpoints
+#
+# This configuration deploys:
+#   - Resource group
+#   - Virtual network with a dedicated Redis subnet
+#   - 3 Redis Enterprise clusters (livekit, platform, session)
+#   - 3 Redis Enterprise databases (one default database per cluster)
+#   - Private DNS zone (privatelink.redisenterprise.cache.azure.net)
+#   - Private DNS zone VNet link
+#   - 3 Private endpoints (one per cluster, with DNS zone group integration)
+#
+# Architecture:
+#   Each Redis cluster serves a distinct purpose:
+#     - platform : general-purpose cache (Enterprise_E10-2)
+#     - livekit  : real-time messaging cache (Enterprise_E10-2)
+#     - session  : session store (Enterprise_E5-2, smaller SKU)
+#
+# Prerequisites:
+#   export TF_VAR_access_token=$(az account get-access-token --resource https://management.azure.com --query accessToken -o tsv)
+#   export TF_VAR_subscription_id=$(az account show --query id -o tsv)
+#   TF_VAR_config_file=configurations/redis_enterprise_private.yaml terraform apply
+
+default_location: swedencentral
+
+azure_resource_groups:
+  redis:
+    resource_group_name: test-007
+    location: swedencentral
+    tags:
+      Environment: test-007
+      ManagedBy: Terraform
+
+azure_virtual_networks:
+  redis:
+    resource_group_name: ref:azure_resource_groups.redis.resource_group_name
+    virtual_network_name: vnet-test-007-eu-region-1
+    location: ref:azure_resource_groups.redis.location
+    address_space:
+      - "10.0.0.0/16"
+    subnets:
+      - name: snet-redis-test-007
+        address_prefix: "10.0.1.0/24"
+    tags: ref:azure_resource_groups.redis.tags
+
+# ── Redis Enterprise Clusters ─────────────────────────────────────────────────
+
+azure_redis_enterprise_clusters:
+  platform:
+    resource_group_name: ref:azure_resource_groups.redis.resource_group_name
+    cluster_name: redis-platform-test-007-eu-region-2
+    location: ref:azure_resource_groups.redis.location
+    sku_name: Enterprise_E10
+    sku_capacity: 2
+    minimum_tls_version: "1.2"
+    public_network_access: Disabled
+    tags:
+      Cluster: platform
+      Environment: test-007
+      ManagedBy: Terraform
+      Name: redis-platform-test-007
+      purpose: platform
+
+  livekit:
+    resource_group_name: ref:azure_resource_groups.redis.resource_group_name
+    cluster_name: redis-livekit-test-007-eu-region-2
+    location: ref:azure_resource_groups.redis.location
+    sku_name: Enterprise_E10
+    sku_capacity: 2
+    minimum_tls_version: "1.2"
+    public_network_access: Disabled
+    tags:
+      Cluster: livekit
+      Environment: test-007
+      ManagedBy: Terraform
+      Name: redis-livekit-test-007
+      purpose: livekit
+
+  session:
+    resource_group_name: ref:azure_resource_groups.redis.resource_group_name
+    cluster_name: redis-session-test-007-eu-region-2
+    location: ref:azure_resource_groups.redis.location
+    sku_name: Enterprise_E5
+    sku_capacity: 2
+    minimum_tls_version: "1.2"
+    public_network_access: Disabled
+    tags:
+      Cluster: session
+      Environment: test-007
+      ManagedBy: Terraform
+      Name: redis-session-test-007
+      purpose: session
+
+# ── Redis Enterprise Databases ────────────────────────────────────────────────
+
+azure_redis_enterprise_databases:
+  platform:
+    resource_group_name: ref:azure_resource_groups.redis.resource_group_name
+    cluster_name: ref:azure_redis_enterprise_clusters.platform.name
+    database_name: default
+    client_protocol: Encrypted
+    clustering_policy: OSSCluster
+    eviction_policy: VolatileLRU
+    port: 10000
+
+  livekit:
+    resource_group_name: ref:azure_resource_groups.redis.resource_group_name
+    cluster_name: ref:azure_redis_enterprise_clusters.livekit.name
+    database_name: default
+    client_protocol: Encrypted
+    clustering_policy: OSSCluster
+    eviction_policy: VolatileLRU
+    port: 10000
+
+  session:
+    resource_group_name: ref:azure_resource_groups.redis.resource_group_name
+    cluster_name: ref:azure_redis_enterprise_clusters.session.name
+    database_name: default
+    client_protocol: Encrypted
+    clustering_policy: OSSCluster
+    eviction_policy: VolatileLRU
+    port: 10000
+
+# ── Private DNS Zone ──────────────────────────────────────────────────────────
+
+azure_private_dns_zones:
+  redis:
+    resource_group_name: ref:azure_resource_groups.redis.resource_group_name
+    zone_name: privatelink.redisenterprise.cache.azure.net
+    virtual_network_links:
+      - name: redis-dns-link-test-007
+        virtual_network_id: ref:azure_virtual_networks.redis.id
+
+# ── Private Endpoints ─────────────────────────────────────────────────────────
+
+azure_private_endpoints:
+  redis_platform:
+    resource_group_name: ref:azure_resource_groups.redis.resource_group_name
+    private_endpoint_name: pe-redis-platform-test-007
+    location: ref:azure_resource_groups.redis.location
+    subnet_id: ref:azure_virtual_networks.redis.subnet_ids.snet-redis-test-007
+    private_link_service_connections:
+      - name: psc-redis-platform
+        private_link_service_id: ref:azure_redis_enterprise_clusters.platform.id
+        group_ids:
+          - redisEnterprise
+    tags:
+      Cluster: platform
+      Environment: test-007
+      ManagedBy: Terraform
+
+  redis_livekit:
+    resource_group_name: ref:azure_resource_groups.redis.resource_group_name
+    private_endpoint_name: pe-redis-livekit-test-007
+    location: ref:azure_resource_groups.redis.location
+    subnet_id: ref:azure_virtual_networks.redis.subnet_ids.snet-redis-test-007
+    private_link_service_connections:
+      - name: psc-redis-livekit
+        private_link_service_id: ref:azure_redis_enterprise_clusters.livekit.id
+        group_ids:
+          - redisEnterprise
+    tags:
+      Cluster: livekit
+      Environment: test-007
+      ManagedBy: Terraform
+
+  redis_session:
+    resource_group_name: ref:azure_resource_groups.redis.resource_group_name
+    private_endpoint_name: pe-redis-session-test-007
+    location: ref:azure_resource_groups.redis.location
+    subnet_id: ref:azure_virtual_networks.redis.subnet_ids.snet-redis-test-007
+    private_link_service_connections:
+      - name: psc-redis-session
+        private_link_service_id: ref:azure_redis_enterprise_clusters.session.id
+        group_ids:
+          - redisEnterprise
+    tags:
+      Cluster: session
+      Environment: test-007
+      ManagedBy: Terraform

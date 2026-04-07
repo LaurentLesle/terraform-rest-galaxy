@@ -1,0 +1,261 @@
+# ── Launchpad: Hub Network + P2S VPN + Private Endpoint ──────────────────────
+#
+# Deploys the connectivity layer for secure dev access to state storage:
+#   - Hub VNet with GatewaySubnet + PE subnet
+#   - Public IP for VPN Gateway
+#   - VPN Gateway with P2S (OpenVPN + Entra ID auth)
+#   - Private DNS zone for blob storage
+#   - Private endpoint for the bootstrap storage account
+#
+# Prerequisites:
+#   - 00-bootstrap deployed (storage account + resource group exist)
+#   - Register the Azure VPN Enterprise Application in your tenant:
+#     https://login.microsoftonline.com/common/oauth2/authorize?client_id=41b23e61-6c1e-4545-b367-cd054e0ed4b4&response_type=code&redirect_uri=https://portal.azure.com&nonce=1234&prompt=admin_consent
+#
+# Authentication:
+#   export TF_VAR_azure_access_token=$(az account get-access-token \
+#     --resource https://management.azure.com --query accessToken -o tsv)
+#   export TF_VAR_subscription_id=$(az account show --query id -o tsv)
+
+# Apply (recommended — uses tf.sh to handle backend + remote states):
+#   ./tf.sh apply configurations/01-launchpad/config.yaml
+#
+# Manual equivalent:
+#   terraform init -reconfigure \
+#     -backend-config="resource_group_name=rg-terraform-state" \
+#     -backend-config="storage_account_name=stdplstate001" \
+#     -backend-config="container_name=tfstate" \
+#     -backend-config="key=launchpad.tfstate" \
+#     -backend-config="use_azuread_auth=true"
+#   terraform apply \
+#     -var="config_file=configurations/01-launchpad/config.yaml" \
+#     -var='remote_state_backend={"resource_group_name":"rg-terraform-state","storage_account_name":"stdplstate001","container_name":"tfstate"}' \
+#     -var='remote_state_keys={"bootstrap":"bootstrap.tfstate"}'
+#
+# Notes:
+#   - VPN Gateway provisioning takes ~30 minutes
+#   - After apply, download the VPN client from the Azure portal:
+#     Portal → VPN Gateway → Point-to-site configuration → Download VPN client
+
+# ── State backend ────────────────────────────────────────────────────────────
+terraform_backend:
+  type: azurerm
+  resource_group_name: rg-terraform-state
+  storage_account_name: stdplstate001
+  container_name: tfstate
+  key: launchpad.tfstate
+  remote_states:
+    bootstrap:
+      key: bootstrap.tfstate
+
+# ── Cross-state reference to 00-bootstrap ────────────────────────────────────
+# Declared in terraform_backend.remote_states above.
+# Makes ref:remote_states.bootstrap.azure_values.azure_storage_accounts.tfstate.id
+# available for the private endpoint (resolved automatically by tf.sh).
+
+# ── External references (not managed by Terraform) ──────────────────────────
+externals:
+  azure_tenants:
+    primary:
+      tenant_id: "4fcc1d67-2ccc-4e50-99c7-93a41aecbca3"
+      _exported_attributes: ["*"]
+
+# ── Resources ────────────────────────────────────────────────────────────────
+
+default_location: westeurope
+
+azure_resource_provider_registrations:
+  network:
+    resource_provider_namespace: Microsoft.Network
+
+azure_resource_groups:
+  launchpad:
+    resource_group_name: rg-launchpad
+    location: westeurope
+    tags:
+      purpose: connectivity
+      managed_by: launchpad
+
+# ── Hub Virtual Network ──────────────────────────────────────────────────────
+
+azure_virtual_networks:
+  hub:
+    resource_group_name: ref:azure_resource_groups.launchpad.resource_group_name
+    virtual_network_name: vnet-hub-launchpad
+    location: ref:azure_resource_groups.launchpad.location
+    address_space:
+      - "10.0.0.0/16"
+    subnets:
+      - name: GatewaySubnet
+        address_prefix: "10.0.0.0/24"
+      - name: snet-private-endpoints
+        address_prefix: "10.0.1.0/24"
+      - name: snet-dns-resolver-inbound
+        address_prefix: "10.0.2.0/28"
+        delegations:
+          - Microsoft.Network/dnsResolvers
+    tags: ref:azure_resource_groups.launchpad.tags
+
+# ── Public IP for VPN Gateway ────────────────────────────────────────────────
+
+azure_public_ip_addresses:
+  vpngw:
+    resource_group_name: ref:azure_resource_groups.launchpad.resource_group_name
+    public_ip_address_name: pip-vpng-hub-launchpad
+    location: ref:azure_resource_groups.launchpad.location
+    sku_name: Standard
+    allocation_method: Static
+    zones:
+      - "1"
+      - "2"
+      - "3"
+    tags: ref:azure_resource_groups.launchpad.tags
+  vpngw2:
+    resource_group_name: ref:azure_resource_groups.launchpad.resource_group_name
+    public_ip_address_name: pip-vpng-hub-launchpad-2
+    location: ref:azure_resource_groups.launchpad.location
+    sku_name: Standard
+    allocation_method: Static
+    zones:
+      - "1"
+      - "2"
+      - "3"
+    tags: ref:azure_resource_groups.launchpad.tags
+  vpngw3:
+    resource_group_name: ref:azure_resource_groups.launchpad.resource_group_name
+    public_ip_address_name: pip-vpng-hub-launchpad-3
+    location: ref:azure_resource_groups.launchpad.location
+    sku_name: Standard
+    allocation_method: Static
+    zones:
+      - "1"
+      - "2"
+      - "3"
+    tags: ref:azure_resource_groups.launchpad.tags
+
+# ── Private DNS Resolver ─────────────────────────────────────────────────────
+# Enables VPN clients to resolve private endpoint DNS names (e.g.
+# privatelink.blob.core.windows.net) via the hub VNet's linked private DNS zones.
+
+azure_dns_resolvers:
+  hub:
+    resource_group_name: ref:azure_resource_groups.launchpad.resource_group_name
+    dns_resolver_name: dnspr-hub-launchpad
+    location: ref:azure_resource_groups.launchpad.location
+    virtual_network_id: ref:azure_virtual_networks.hub.id
+    inbound_endpoints:
+      - name: inbound
+        subnet_id: ref:azure_virtual_networks.hub.subnet_ids.snet-dns-resolver-inbound
+    tags: ref:azure_resource_groups.launchpad.tags
+
+# ── VPN Gateway with P2S (OpenVPN + Entra ID) ───────────────────────────────
+
+azure_virtual_network_gateways:
+  hub:
+    resource_group_name: ref:azure_resource_groups.launchpad.resource_group_name
+    gateway_name: vpng-hub-launchpad
+    location: ref:azure_resource_groups.launchpad.location
+    gateway_type: Vpn
+    vpn_type: RouteBased
+    sku_name: VpnGw1AZ
+    sku_tier: VpnGw1AZ
+    vpn_gateway_generation: Generation1
+    enable_bgp: true
+    active_active: true
+    ip_configurations:
+      - name: default
+        subnet_id: ref:azure_virtual_networks.hub.subnet_ids.GatewaySubnet
+        public_ip_address_id: ref:azure_public_ip_addresses.vpngw.id
+      - name: activeActive
+        subnet_id: ref:azure_virtual_networks.hub.subnet_ids.GatewaySubnet
+        public_ip_address_id: ref:azure_public_ip_addresses.vpngw2.id
+      - name: p2sClient
+        subnet_id: ref:azure_virtual_networks.hub.subnet_ids.GatewaySubnet
+        public_ip_address_id: ref:azure_public_ip_addresses.vpngw3.id
+    vpn_client_configuration:
+      address_prefixes:
+        - "172.16.0.0/24"
+      vpn_client_protocols:
+        - OpenVPN
+      vpn_authentication_types:
+        - AAD
+      aad_tenant: "https://login.microsoftonline.com/${ref:externals.azure_tenants.primary.tenant_id}/"
+      aad_audience: "c632b3df-fb67-4d84-bdcf-b95ad541b5c8"
+      aad_issuer: "https://sts.windows.net/${ref:externals.azure_tenants.primary.tenant_id}/"
+    tags: ref:azure_resource_groups.launchpad.tags
+
+# ── Private DNS Zone for Blob Storage ────────────────────────────────────────
+
+azure_private_dns_zones:
+  blob:
+    resource_group_name: ref:azure_resource_groups.launchpad.resource_group_name
+    zone_name: privatelink.blob.core.windows.net
+    virtual_network_links:
+      - name: link-hub
+        virtual_network_id: ref:azure_virtual_networks.hub.id
+        registration_enabled: false
+    tags: ref:azure_resource_groups.launchpad.tags
+
+# ── Entra ID Group for VPN access (PIM-eligible) ─────────────────────────────
+# Members must activate their membership via PIM before connecting to the VPN.
+# Setting is_assignable_to_role enables PIM eligible assignments on this group.
+
+entraid_groups:
+  vpn_users:
+    display_name: VPN Users - Launchpad
+    description: "PIM-eligible group for Azure VPN P2S access to the launchpad hub network."
+    mail_enabled: false
+    mail_nickname: vpn-users-launchpad
+    security_enabled: true
+    # is_assignable_to_role: true # need the tenant to have a P2 license
+    visibility: Private
+
+# ── Assign the VPN group to the Azure VPN Enterprise Application ────────────
+# This grants members of the group access to the VPN client profile.
+# The resource_app_id is the Azure VPN Enterprise Application.
+
+entraid_app_role_assignments:
+  vpn_users_to_vpn_app:
+    resource_app_id: "c632b3df-fb67-4d84-bdcf-b95ad541b5c8"
+    principal_id: "ref:entraid_groups.vpn_users.id"
+
+# ── Register Azure VPN Service Principals in the Tenant ──────────────────────
+# These Enterprise Application registrations are required before admin consent
+# can be granted. Equivalent to "az ad sp create --id <appId>".
+
+entraid_service_principals:
+  vpn_server:
+    app_id: "c632b3df-fb67-4d84-bdcf-b95ad541b5c8"   # Azure VPN (audience)
+  vpn_client:
+    app_id: "41b23e61-6c1e-4545-b367-cd054e0ed4b4"   # Azure VPN Client
+
+# ── Grant Admin Consent for Azure VPN Client Application ─────────────────────
+# This is the programmatic equivalent of clicking "Grant administrator consent
+# for Azure VPN client application" in the VPN Gateway P2S configuration.
+# Uses the /beta Graph API endpoint (required for service principal callers
+# in CI/CD pipelines).
+
+entraid_oauth2_permission_grants:
+  vpn_client_consent:
+    client_id: "ref:entraid_service_principals.vpn_client.id"
+    resource_id: "ref:entraid_service_principals.vpn_server.id"
+    scope: "user_impersonation"
+
+# ── Private Endpoint for State Storage ───────────────────────────────────────
+# Points to the storage account created by 00-bootstrap via remote state.
+
+azure_private_endpoints:
+  tfstate_blob:
+    resource_group_name: ref:azure_resource_groups.launchpad.resource_group_name
+    private_endpoint_name: pe-stdplstate001-blob
+    location: ref:azure_resource_groups.launchpad.location
+    subnet_id: ref:azure_virtual_networks.hub.subnet_ids.snet-private-endpoints
+    private_link_service_connections:
+      - name: psc-stdplstate001-blob
+        private_link_service_id: ref:remote_states.bootstrap.azure_values.azure_storage_accounts.tfstate.id
+        group_ids:
+          - blob
+    private_dns_zone_group:
+      private_dns_zone_ids:
+        - ref:azure_private_dns_zones.blob.id
+    tags: ref:azure_resource_groups.launchpad.tags

@@ -1,0 +1,67 @@
+# Virtual WAN with Secure Hub and Routing Intent
+#
+# This configuration deploys:
+#   - Resource group
+#   - Virtual WAN (Standard type)
+#   - Firewall Policy (parent policy for the Azure Firewall)
+#   - Virtual Hub (connected to the Virtual WAN)
+#   - Azure Firewall (AZFW_Hub SKU, deployed in the Virtual Hub with the Firewall Policy)
+#   - Routing Intent (Internet + PrivateTraffic policies routing through the firewall)
+#
+# The result is a "Secure Virtual Hub" — a Virtual Hub with an Azure Firewall
+# and Routing Intent enabled, ensuring all traffic is inspected by the firewall.
+#
+# Prerequisites:
+#   export TF_VAR_access_token=$(az account get-access-token --resource https://management.azure.com --query accessToken -o tsv)
+#   export TF_VAR_subscription_id=$(az account show --query id -o tsv)
+#   TF_VAR_config_file=configurations/vwan_secure_hub_routing_intent.yaml terraform apply
+
+default_location: westeurope
+
+azure_resource_groups:
+  hub:
+    resource_group_name: rg-vwan-hub
+    location: westeurope
+
+azure_virtual_wans:
+  hub:
+    resource_group_name: ref:azure_resource_groups.hub.resource_group_name
+    virtual_wan_name: vwan-hub
+    location: ref:azure_resource_groups.hub.location
+    type: Standard
+
+azure_firewall_policies:
+  hub:
+    resource_group_name: ref:azure_resource_groups.hub.resource_group_name
+    firewall_policy_name: afwp-hub
+    location: ref:azure_resource_groups.hub.location
+    sku_tier: Standard
+    threat_intel_mode: Alert
+
+azure_virtual_hubs:
+  hub:
+    resource_group_name: ref:azure_resource_groups.hub.resource_group_name
+    virtual_hub_name: vhub-hub
+    location: ref:azure_resource_groups.hub.location
+    virtual_wan_id: ref:azure_virtual_wans.hub.id
+    address_prefix: "10.0.0.0/24"
+    sku: Standard
+
+azure_firewalls:
+  hub:
+    resource_group_name: ref:azure_resource_groups.hub.resource_group_name
+    firewall_name: afw-hub
+    location: ref:azure_resource_groups.hub.location
+    sku_name: AZFW_Hub
+    sku_tier: Standard
+    virtual_hub_id: ref:azure_virtual_hubs.hub.id
+    firewall_policy_id: ref:azure_firewall_policies.hub.id
+    public_ip_count: 1
+
+azure_routing_intents:
+  hub:
+    resource_group_name: ref:azure_resource_groups.hub.resource_group_name
+    virtual_hub_name: ref:azure_virtual_hubs.hub.name
+    firewall_id: ref:azure_firewalls.hub.id
+    internet_traffic: true
+    private_traffic: true

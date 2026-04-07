@@ -1,0 +1,17 @@
+# Complete resource group configuration (all attributes).
+# Authentication — supply via environment variables:
+#   export TF_VAR_access_token=$(az account get-access-token --resource https://management.azure.com --query accessToken -o tsv)
+#   export TF_VAR_subscription_id=$(az account show --query id -o tsv)
+#   export TF_VAR_config_file=config.yaml
+#   terraform init && terraform apply  (from repo root)
+
+resource_groups:
+  complete:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: my-resource-group  # optional: omit to use naming convention
+    location: westeurope                    # optional: omit to use var.naming.location
+    managed_by: null
+    tags:
+      environment: production
+      team: platform
+      cost_center: "12345"

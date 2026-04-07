@@ -1,0 +1,27 @@
+# Full configuration example — copy and adapt for your environment.
+# Authentication — supply via environment variables:
+#   export TF_VAR_access_token=$(az account get-access-token --resource https://management.azure.com --query accessToken -o tsv)
+#   export TF_VAR_subscription_id=$(az account show --query id -o tsv)
+#   TF_VAR_config_file=examples/configurations/config.yaml terraform apply
+
+terraform_backend:
+  type: local
+
+azure_resource_groups:
+  test:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: test-rg-rest-module
+    location: westeurope
+    tags:
+      environment: test
+      managed_by: terraform-rest
+
+azure_storage_accounts:
+  test:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: ref:azure_resource_groups.test.resource_group_name
+    account_name: satest001
+    sku_name: Standard_LRS
+    kind: StorageV2
+    location: ref:azure_resource_groups.test.location
+    tags: ref:azure_resource_groups.test.tags

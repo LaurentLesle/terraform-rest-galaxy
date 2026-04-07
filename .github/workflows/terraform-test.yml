@@ -1,0 +1,182 @@
+name: Terraform Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  TF_VERSION: "1.14.5"
+  GO_VERSION: "1.25"
+
+jobs:
+  # ── Plan-only tests — no Azure credentials needed ──────────────────────────
+  plan-tests:
+    name: "Plan-only tests"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Checkout rest provider
+        if: ${{ !env.ACT }}
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/terraform-provider-rest
+          path: .providers/rest
+          # For forks/local: override with the actual repo or use a local path
+          ref: main
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+
+      - name: Build & install rest provider
+        run: |
+          if [ "$ACT" = "true" ]; then
+            .github/scripts/setup-providers.sh /tmp/rest
+          else
+            .github/scripts/setup-providers.sh .providers/rest
+          fi
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        run: |
+          rm -f .terraform.lock.hcl
+          terraform init -backend=false
+
+      - name: Run plan-only config tests (tests/azure)
+        env:
+          TF_VAR_access_token: "placeholder"
+        run: |
+          terraform test \
+            -test-directory=tests/azure \
+            -filter=tests/azure/config_storage_account_cmk.tftest.hcl \
+            -filter=tests/azure/config_vwan_secure_hub_routing_intent.tftest.hcl \
+            -filter=tests/azure/config_acme_github_runners.tftest.hcl
+
+      - name: Run plan-only tests (tests/)
+        env:
+          TF_VAR_access_token: "placeholder"
+        run: |
+          terraform test \
+            -filter=tests/unit_azure_billing_associated_tenant.tftest.hcl \
+            -filter=tests/unit_azure_dns_record_set.tftest.hcl \
+            -filter=tests/unit_azure_email_communication_service_domain.tftest.hcl \
+            -filter=tests/unit_azure_management_lock.tftest.hcl \
+            -filter=tests/unit_github_hosted_runner.tftest.hcl \
+            -filter=tests/unit_github_runner_group.tftest.hcl \
+            -filter=tests/integration_azure_dns_record_set.tftest.hcl \
+            -filter=tests/integration_azure_email_communication_service_domain.tftest.hcl \
+            -filter=tests/integration_config_ciam_directory_dpl8432847326.tftest.hcl \
+            -filter=tests/integration_config_communication_service_email.tftest.hcl \
+            -filter=tests/integration_config_acme_github_runners.tftest.hcl \
+            -filter=tests/integration_config_acme_ipam.tftest.hcl \
+            -filter=tests/integration_config_github_actions_oidc.tftest.hcl
+
+  # ── Apply tests — require Azure credentials ────────────────────────────────
+  apply-tests:
+    name: "Apply tests"
+    runs-on: ubuntu-latest
+    # Only run on push to main (skip in PRs / forks / act local runs)
+    if: github.event_name != 'pull_request'
+    permissions:
+      id-token: write   # OIDC
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Checkout rest provider
+        if: ${{ !env.ACT }}
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/terraform-provider-rest
+          path: .providers/rest
+          ref: main
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+
+      - name: Build & install rest provider
+        run: |
+          if [ "$ACT" = "true" ]; then
+            .github/scripts/setup-providers.sh /tmp/rest
+          else
+            .github/scripts/setup-providers.sh .providers/rest
+          fi
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        run: |
+          rm -f .terraform.lock.hcl
+          terraform init -backend=false
+
+      - name: Acquire Azure token
+        id: token
+        run: |
+          TOKEN=$(az account get-access-token --resource https://management.azure.com --query accessToken -o tsv)
+          echo "::add-mask::$TOKEN"
+          echo "access_token=$TOKEN" >> "$GITHUB_OUTPUT"
+
+      - name: Run apply tests (tests/azure)
+        env:
+          TF_VAR_access_token: ${{ steps.token.outputs.access_token }}
+          TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        run: |
+          terraform test \
+            -test-directory=tests/azure \
+            -filter=tests/azure/config_subscription_with_providers.tftest.hcl \
+            -filter=tests/azure/resource_group.tftest.hcl \
+            -filter=tests/azure/storage_account.tftest.hcl \
+            -filter=tests/azure/ref_resolution.tftest.hcl
+
+      - name: Run tests with credentials (tests/)
+        env:
+          TF_VAR_access_token: ${{ steps.token.outputs.access_token }}
+          TF_VAR_azure_access_token: ${{ steps.token.outputs.access_token }}
+          TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        run: |
+          terraform test \
+            -filter=tests/unit_azure_app_service_domain.tftest.hcl \
+            -filter=tests/unit_azure_communication_service.tftest.hcl \
+            -filter=tests/unit_azure_dns_zone.tftest.hcl \
+            -filter=tests/unit_azure_email_communication_service.tftest.hcl \
+            -filter=tests/unit_azure_ipam_pool.tftest.hcl \
+            -filter=tests/unit_azure_ipam_static_cidr.tftest.hcl \
+            -filter=tests/unit_azure_network_manager.tftest.hcl \
+            -filter=tests/integration_azure_app_service_domain.tftest.hcl \
+            -filter=tests/integration_azure_billing_associated_tenant.tftest.hcl \
+            -filter=tests/integration_azure_communication_service.tftest.hcl \
+            -filter=tests/integration_azure_dns_zone.tftest.hcl \
+            -filter=tests/integration_azure_email_communication_service.tftest.hcl \
+            -filter=tests/integration_azure_ipam_pool.tftest.hcl \
+            -filter=tests/integration_azure_ipam_static_cidr.tftest.hcl \
+            -filter=tests/integration_azure_network_manager.tftest.hcl \
+            -filter=tests/integration_config_aks_regulated.tftest.hcl
+
+

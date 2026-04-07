@@ -1,0 +1,65 @@
+# Storage Account with Customer-Managed Key (CMK) Encryption
+#
+# This configuration deploys:
+#   - Resource group
+#   - User-assigned managed identity (for storage → key vault access)
+#   - Key vault with RBAC authorization and purge protection
+#   - Key vault key (RSA 2048)
+#   - Role assignment: "Key Vault Crypto User" for the identity on the vault
+#   - Storage account with CMK encryption using the above key + identity
+#
+# Prerequisites:
+#   export TF_VAR_access_token=$(az account get-access-token --resource https://management.azure.com --query accessToken -o tsv)
+#   TF_VAR_config_file=configurations/storage_account_cmk.yaml terraform apply
+
+default_location: westeurope
+
+azure_resource_groups:
+  cmk:
+    resource_group_name: rg-cmk
+    location: westeurope
+
+azure_user_assigned_identities:
+  cmk_sa:
+    resource_group_name: ref:azure_resource_groups.cmk.resource_group_name
+    identity_name: id-cmk-sa
+    location: ref:azure_resource_groups.cmk.location
+
+azure_key_vaults:
+  cmk:
+    resource_group_name: ref:azure_resource_groups.cmk.resource_group_name
+    vault_name: kv-cmk
+    location: ref:azure_resource_groups.cmk.location
+    enable_rbac_authorization: true
+    enable_purge_protection: true
+
+azure_key_vault_keys:
+  cmk_sa:
+    resource_group_name: ref:azure_resource_groups.cmk.resource_group_name
+    vault_name: ref:azure_key_vaults.cmk.name
+    key_name: cmk-storage
+    key_type: RSA
+    key_size: 2048
+
+azure_role_assignments:
+  cmk_sa_crypto_user:
+    scope: ref:azure_key_vaults.cmk.id
+    # Key Vault Crypto User built-in role definition ID
+    role_definition_id: /providers/Microsoft.Authorization/roleDefinitions/12338af0-0e69-4776-bea7-57ae8d297424
+    principal_id: ref:azure_user_assigned_identities.cmk_sa.principal_id
+    principal_type: ServicePrincipal
+
+azure_storage_accounts:
+  cmk:
+    resource_group_name: ref:azure_resource_groups.cmk.resource_group_name
+    account_name: sacmk001
+    location: ref:azure_resource_groups.cmk.location
+    sku_name: Standard_LRS
+    kind: StorageV2
+    identity_type: UserAssigned
+    identity_user_assigned_identity_ids:
+      - ref:azure_user_assigned_identities.cmk_sa.id
+    encryption_key_source: Microsoft.Keyvault
+    encryption_key_vault_uri: ref:azure_key_vaults.cmk.vault_uri
+    encryption_key_name: ref:azure_key_vault_keys.cmk_sa.name
+    encryption_identity: ref:azure_user_assigned_identities.cmk_sa.id

@@ -1,0 +1,433 @@
+# Acme Virtual WAN with ExpressRoute to Vast + IPAM Governance
+#
+# This configuration deploys the full Acme-provisioned network architecture:
+#   - Network Manager + IPAM pools for centralised CIDR governance
+#   - Virtual WAN (Standard) as the backbone
+#   - 2 Virtual Hubs in US West (each with S2S VPN GW 40 units + Route Server 20 units)
+#   - 2 Virtual Hubs in Israel Central (each with Route Server 20 units)
+#   - Hub implicit peering via the Microsoft Global Network Backbone (automatic within vWAN)
+#   - 3 Virtual Networks in Israel Central with private endpoints
+#   - vHub-to-VNet peering (virtual hub connections)
+#   - Staging storage account in Israel Central
+#   - ExpressRoute Direct (100 Gbps port pair) with Local circuit (Unlimited Data)
+#   - ExpressRoute Gateway (20 Gbps) in a dedicated VNet
+#   - ExpressRoute connection with FastPath enabled
+#
+# IPAM Pool hierarchy:
+#   pool-acme-root  (10.0.0.0/8)
+#     ├── pool-acme-hubs       (10.0.0.0/16)   → hub CIDRs as static reservations
+#     ├── pool-acme-spoke-vnets (10.10.0.0/14) → spoke VNet CIDRs (PE VNets)
+#     └── pool-acme-infra-vnets (10.20.0.0/16) → infra VNet CIDRs (ER GW VNet)
+#
+# Prerequisites:
+#   export TF_VAR_access_token=$(az account get-access-token --resource https://management.azure.com --query accessToken -o tsv)
+#   export TF_VAR_subscription_id=$(az account show --query id -o tsv)
+#   TF_VAR_config_file=configurations/acme_vwan_expressroute.yaml terraform apply
+
+# ── State backend ────────────────────────────────────────────────────────────
+terraform_backend:
+  type: azurerm
+  resource_group_name: rg-terraform-state
+  storage_account_name: stdplstate001
+  container_name: tfstate
+  key: acme_vwan_expressroute.tfstate
+
+default_location: israelcentral
+
+# ── Resource Groups ───────────────────────────────────────────────────────────
+
+azure_resource_groups:
+  acme_uswest:
+    resource_group_name: rg-acme-uswest
+    location: westus
+
+  acme_ilcentral:
+    resource_group_name: rg-acme-ilcentral
+    location: israelcentral
+
+  acme_er:
+    resource_group_name: rg-acme-expressroute
+    location: israelcentral
+
+# ── Network Manager ───────────────────────────────────────────────────────────
+
+azure_network_managers:
+  acme:
+    resource_group_name: ref:azure_resource_groups.acme_uswest.resource_group_name
+    network_manager_name: nm-acme
+    location: ref:azure_resource_groups.acme_uswest.location
+    scope_accesses:
+      - Connectivity
+    description: "Acme network IPAM — centralised CIDR governance"
+
+# ── IPAM Pools (root + 3 child pools) ────────────────────────────────────────
+
+azure_ipam_pools:
+  # Root pool — entire Acme supernet
+  root:
+    resource_group_name: ref:azure_resource_groups.acme_uswest.resource_group_name
+    network_manager_name: ref:azure_network_managers.acme.name
+    pool_name: pool-acme-root
+    location: ref:azure_resource_groups.acme_uswest.location
+    address_prefixes:
+      - "10.0.0.0/8"
+    description: "Acme supernet — all Azure + on-prem ranges"
+
+  # Child pool — vWAN hub address space
+  hubs:
+    resource_group_name: ref:azure_resource_groups.acme_uswest.resource_group_name
+    network_manager_name: ref:azure_network_managers.acme.name
+    pool_name: pool-acme-hubs
+    location: ref:azure_resource_groups.acme_uswest.location
+    parent_pool_name: pool-acme-root
+    address_prefixes:
+      - "10.0.0.0/16"
+    description: "vWAN hub CIDRs"
+
+  # Child pool — spoke VNets (private endpoint VNets)
+  spoke_vnets:
+    resource_group_name: ref:azure_resource_groups.acme_uswest.resource_group_name
+    network_manager_name: ref:azure_network_managers.acme.name
+    pool_name: pool-acme-spoke-vnets
+    location: ref:azure_resource_groups.acme_uswest.location
+    parent_pool_name: pool-acme-root
+    address_prefixes:
+      - "10.10.0.0/14"
+    description: "Spoke virtual network CIDRs (PE VNets)"
+
+  # Child pool — infra VNets (ER gateway VNet)
+  infra_vnets:
+    resource_group_name: ref:azure_resource_groups.acme_uswest.resource_group_name
+    network_manager_name: ref:azure_network_managers.acme.name
+    pool_name: pool-acme-infra-vnets
+    location: ref:azure_resource_groups.acme_uswest.location
+    parent_pool_name: pool-acme-root
+    address_prefixes:
+      - "10.20.0.0/16"
+    description: "Infrastructure virtual network CIDRs (ER gateway)"
+
+# ── IPAM Static CIDRs (reservations for hubs + VNets) ────────────────────────
+
+azure_ipam_static_cidrs:
+  # ── Hub reservations ──
+  hub1_uswest:
+    resource_group_name: ref:azure_resource_groups.acme_uswest.resource_group_name
+    network_manager_name: ref:azure_network_managers.acme.name
+    pool_name: ref:azure_ipam_pools.hubs.name
+    static_cidr_name: hub1-uswest
+    address_prefixes:
+      - "10.1.0.0/24"
+    description: "vhub-acme-uswest-1"
+
+  hub2_uswest:
+    resource_group_name: ref:azure_resource_groups.acme_uswest.resource_group_name
+    network_manager_name: ref:azure_network_managers.acme.name
+    pool_name: ref:azure_ipam_pools.hubs.name
+    static_cidr_name: hub2-uswest
+    address_prefixes:
+      - "10.2.0.0/24"
+    description: "vhub-acme-uswest-2"
+
+  hub3a_ilcentral:
+    resource_group_name: ref:azure_resource_groups.acme_uswest.resource_group_name
+    network_manager_name: ref:azure_network_managers.acme.name
+    pool_name: ref:azure_ipam_pools.hubs.name
+    static_cidr_name: hub3a-israelcentral
+    address_prefixes:
+      - "10.3.0.0/24"
+    description: "vhub-acme-ilcentral-3a"
+
+  hub3b_ilcentral:
+    resource_group_name: ref:azure_resource_groups.acme_uswest.resource_group_name
+    network_manager_name: ref:azure_network_managers.acme.name
+    pool_name: ref:azure_ipam_pools.hubs.name
+    static_cidr_name: hub3b-israelcentral
+    address_prefixes:
+      - "10.4.0.0/24"
+    description: "vhub-acme-ilcentral-3b"
+
+  # ── Spoke VNet reservations ──
+  pe_vnet1_ilcentral:
+    resource_group_name: ref:azure_resource_groups.acme_uswest.resource_group_name
+    network_manager_name: ref:azure_network_managers.acme.name
+    pool_name: ref:azure_ipam_pools.spoke_vnets.name
+    static_cidr_name: vnet-pe1-israelcentral
+    address_prefixes:
+      - "10.10.0.0/16"
+    description: "vnet-acme-pe1-ilcentral"
+
+  pe_vnet2_ilcentral:
+    resource_group_name: ref:azure_resource_groups.acme_uswest.resource_group_name
+    network_manager_name: ref:azure_network_managers.acme.name
+    pool_name: ref:azure_ipam_pools.spoke_vnets.name
+    static_cidr_name: vnet-pe2-israelcentral
+    address_prefixes:
+      - "10.11.0.0/16"
+    description: "vnet-acme-pe2-ilcentral"
+
+  pe_vnet3_ilcentral:
+    resource_group_name: ref:azure_resource_groups.acme_uswest.resource_group_name
+    network_manager_name: ref:azure_network_managers.acme.name
+    pool_name: ref:azure_ipam_pools.spoke_vnets.name
+    static_cidr_name: vnet-pe3-israelcentral
+    address_prefixes:
+      - "10.12.0.0/16"
+    description: "vnet-acme-pe3-ilcentral"
+
+  # ── Infra VNet reservations ──
+  ergw_vnet_ilcentral:
+    resource_group_name: ref:azure_resource_groups.acme_uswest.resource_group_name
+    network_manager_name: ref:azure_network_managers.acme.name
+    pool_name: ref:azure_ipam_pools.infra_vnets.name
+    static_cidr_name: vnet-ergw-israelcentral
+    address_prefixes:
+      - "10.20.0.0/16"
+    description: "vnet-acme-ergw-ilcentral"
+
+# ── Virtual WAN ───────────────────────────────────────────────────────────────
+
+azure_virtual_wans:
+  acme:
+    resource_group_name: ref:azure_resource_groups.acme_uswest.resource_group_name
+    virtual_wan_name: vwan-acme
+    location: ref:azure_resource_groups.acme_uswest.location
+    type: Standard
+
+# ── Virtual Hubs ──────────────────────────────────────────────────────────────
+
+azure_virtual_hubs:
+  hub1_uswest:
+    resource_group_name: ref:azure_resource_groups.acme_uswest.resource_group_name
+    virtual_hub_name: vhub-acme-uswest-1
+    location: ref:azure_resource_groups.acme_uswest.location
+    virtual_wan_id: ref:azure_virtual_wans.acme.id
+    address_prefix: ref:azure_ipam_static_cidrs.hub1_uswest.address_prefix
+    sku: Standard
+    virtual_router_auto_scale_min_capacity: 20
+
+  hub2_uswest:
+    resource_group_name: ref:azure_resource_groups.acme_uswest.resource_group_name
+    virtual_hub_name: vhub-acme-uswest-2
+    location: ref:azure_resource_groups.acme_uswest.location
+    virtual_wan_id: ref:azure_virtual_wans.acme.id
+    address_prefix: ref:azure_ipam_static_cidrs.hub2_uswest.address_prefix
+    sku: Standard
+    virtual_router_auto_scale_min_capacity: 20
+
+  hub3_ilcentral_a:
+    resource_group_name: ref:azure_resource_groups.acme_ilcentral.resource_group_name
+    virtual_hub_name: vhub-acme-ilcentral-3a
+    location: ref:azure_resource_groups.acme_ilcentral.location
+    virtual_wan_id: ref:azure_virtual_wans.acme.id
+    address_prefix: ref:azure_ipam_static_cidrs.hub3a_ilcentral.address_prefix
+    sku: Standard
+    virtual_router_auto_scale_min_capacity: 20
+
+  hub3_ilcentral_b:
+    resource_group_name: ref:azure_resource_groups.acme_ilcentral.resource_group_name
+    virtual_hub_name: vhub-acme-ilcentral-3b
+    location: ref:azure_resource_groups.acme_ilcentral.location
+    virtual_wan_id: ref:azure_virtual_wans.acme.id
+    address_prefix: ref:azure_ipam_static_cidrs.hub3b_ilcentral.address_prefix
+    sku: Standard
+    virtual_router_auto_scale_min_capacity: 20
+
+# ── VPN Gateways (US West hubs — S2S, 40 scale units each) ───────────────────
+
+azure_vpn_gateways:
+  hub1_uswest:
+    resource_group_name: ref:azure_resource_groups.acme_uswest.resource_group_name
+    gateway_name: vpngw-acme-uswest-1
+    location: ref:azure_resource_groups.acme_uswest.location
+    virtual_hub_id: ref:azure_virtual_hubs.hub1_uswest.id
+    vpn_gateway_scale_unit: 40
+
+  hub2_uswest:
+    resource_group_name: ref:azure_resource_groups.acme_uswest.resource_group_name
+    gateway_name: vpngw-acme-uswest-2
+    location: ref:azure_resource_groups.acme_uswest.location
+    virtual_hub_id: ref:azure_virtual_hubs.hub2_uswest.id
+    vpn_gateway_scale_unit: 40
+
+# ── Virtual Networks (Israel Central) ─────────────────────────────────────────
+
+azure_virtual_networks:
+  pe_vnet1_ilcentral:
+    resource_group_name: ref:azure_resource_groups.acme_ilcentral.resource_group_name
+    virtual_network_name: vnet-acme-pe1-ilcentral
+    location: ref:azure_resource_groups.acme_ilcentral.location
+    address_space: ref:azure_ipam_static_cidrs.pe_vnet1_ilcentral.address_prefixes
+    subnets:
+      - name: snet-pe
+        address_prefix: "10.10.1.0/24"
+
+  pe_vnet2_ilcentral:
+    resource_group_name: ref:azure_resource_groups.acme_ilcentral.resource_group_name
+    virtual_network_name: vnet-acme-pe2-ilcentral
+    location: ref:azure_resource_groups.acme_ilcentral.location
+    address_space: ref:azure_ipam_static_cidrs.pe_vnet2_ilcentral.address_prefixes
+    subnets:
+      - name: snet-pe
+        address_prefix: "10.11.1.0/24"
+
+  pe_vnet3_ilcentral:
+    resource_group_name: ref:azure_resource_groups.acme_ilcentral.resource_group_name
+    virtual_network_name: vnet-acme-pe3-ilcentral
+    location: ref:azure_resource_groups.acme_ilcentral.location
+    address_space: ref:azure_ipam_static_cidrs.pe_vnet3_ilcentral.address_prefixes
+    subnets:
+      - name: snet-pe
+        address_prefix: "10.12.1.0/24"
+
+  ergw_vnet_ilcentral:
+    resource_group_name: ref:azure_resource_groups.acme_er.resource_group_name
+    virtual_network_name: vnet-acme-ergw-ilcentral
+    location: ref:azure_resource_groups.acme_er.location
+    address_space: ref:azure_ipam_static_cidrs.ergw_vnet_ilcentral.address_prefixes
+    subnets:
+      - name: GatewaySubnet
+        address_prefix: "10.20.0.0/24"
+      - name: snet-pe
+        address_prefix: "10.20.1.0/24"
+
+# ── Public IP Addresses ───────────────────────────────────────────────────────
+
+azure_public_ip_addresses:
+  ergw_ilcentral:
+    resource_group_name: ref:azure_resource_groups.acme_er.resource_group_name
+    public_ip_address_name: pip-ergw-acme-ilcentral
+    location: ref:azure_resource_groups.acme_er.location
+    sku_name: Standard
+    sku_tier: Regional
+    allocation_method: Static
+
+# ── ExpressRoute Port (100 Gbps pair) ────────────────────────────────────────
+
+azure_express_route_ports:
+  acme_ilcentral:
+    resource_group_name: ref:azure_resource_groups.acme_er.resource_group_name
+    port_name: erport-acme-ilcentral
+    location: ref:azure_resource_groups.acme_er.location
+    peering_location: "Tel Aviv"
+    bandwidth_in_gbps: 100
+    encapsulation: Dot1Q
+
+# ── ExpressRoute Circuit (Local, Unlimited Data) ─────────────────────────────
+
+azure_express_route_circuits:
+  acme_ilcentral:
+    resource_group_name: ref:azure_resource_groups.acme_er.resource_group_name
+    circuit_name: erc-acme-ilcentral
+    location: ref:azure_resource_groups.acme_er.location
+    sku_tier: Local
+    sku_family: UnlimitedData
+    bandwidth_in_gbps: 100
+    express_route_port_id: ref:azure_express_route_ports.acme_ilcentral.id
+
+# ── ExpressRoute Circuit Peering (Azure Private Peering) ─────────────────────
+
+azure_express_route_circuit_peerings:
+  acme_ilcentral_private:
+    resource_group_name: ref:azure_resource_groups.acme_er.resource_group_name
+    circuit_name: ref:azure_express_route_circuits.acme_ilcentral.name
+    peering_name: AzurePrivatePeering
+    peering_type: AzurePrivatePeering
+    vlan_id: 100
+    primary_peer_address_prefix: "172.16.0.0/30"
+    secondary_peer_address_prefix: "172.16.0.4/30"
+    peer_asn: 65001
+
+# ── Virtual Network Gateway (ExpressRoute GW, 20 Gbps) ───────────────────────
+
+azure_virtual_network_gateways:
+  ergw_ilcentral:
+    resource_group_name: ref:azure_resource_groups.acme_er.resource_group_name
+    gateway_name: ergw-acme-ilcentral
+    location: ref:azure_resource_groups.acme_er.location
+    gateway_type: ExpressRoute
+    sku_name: ErGwScale
+    sku_tier: ErGwScale
+    ip_configurations:
+      - name: default
+        subnet_id: ref:azure_virtual_networks.ergw_vnet_ilcentral.subnet_ids.GatewaySubnet
+        public_ip_address_id: ref:azure_public_ip_addresses.ergw_ilcentral.id
+
+# ── ExpressRoute Connection (FastPath enabled) ────────────────────────────────
+
+azure_virtual_network_gateway_connections:
+  ergw_to_circuit:
+    resource_group_name: ref:azure_resource_groups.acme_er.resource_group_name
+    connection_name: conn-ergw-to-erc-acme
+    location: ref:azure_resource_groups.acme_er.location
+    connection_type: ExpressRoute
+    virtual_network_gateway1_id: ref:azure_virtual_network_gateways.ergw_ilcentral.id
+    peer_id: ref:azure_express_route_circuits.acme_ilcentral.id
+    express_route_gateway_bypass: true
+    enable_private_link_fast_path: true
+
+# ── Virtual Hub Connections (vHub peering to VNets) ───────────────────────────
+
+azure_virtual_hub_connections:
+  hub3a_to_vnet1:
+    resource_group_name: ref:azure_resource_groups.acme_ilcentral.resource_group_name
+    virtual_hub_name: ref:azure_virtual_hubs.hub3_ilcentral_a.name
+    connection_name: conn-hub3a-to-vnet1
+    remote_virtual_network_id: ref:azure_virtual_networks.pe_vnet1_ilcentral.id
+
+  hub3a_to_vnet_ergw:
+    resource_group_name: ref:azure_resource_groups.acme_er.resource_group_name
+    virtual_hub_name: ref:azure_virtual_hubs.hub3_ilcentral_a.name
+    connection_name: conn-hub3a-to-vnet-ergw
+    remote_virtual_network_id: ref:azure_virtual_networks.ergw_vnet_ilcentral.id
+
+  hub3b_to_vnet3:
+    resource_group_name: ref:azure_resource_groups.acme_ilcentral.resource_group_name
+    virtual_hub_name: ref:azure_virtual_hubs.hub3_ilcentral_b.name
+    connection_name: conn-hub3b-to-vnet3
+    remote_virtual_network_id: ref:azure_virtual_networks.pe_vnet3_ilcentral.id
+
+# ── Storage Account (Staging — Israel Central) ───────────────────────────────
+
+azure_storage_accounts:
+  staging_ilcentral:
+    resource_group_name: ref:azure_resource_groups.acme_ilcentral.resource_group_name
+    account_name: saacmestaging001
+    location: ref:azure_resource_groups.acme_ilcentral.location
+    sku_name: Standard_LRS
+    kind: StorageV2
+
+# ── Private Endpoints ─────────────────────────────────────────────────────────
+
+azure_private_endpoints:
+  pe_staging_vnet1:
+    resource_group_name: ref:azure_resource_groups.acme_ilcentral.resource_group_name
+    private_endpoint_name: pe-staging-vnet1
+    location: ref:azure_resource_groups.acme_ilcentral.location
+    subnet_id: ref:azure_virtual_networks.pe_vnet1_ilcentral.subnet_ids.snet-pe
+    private_link_service_connections:
+      - name: psc-staging-vnet1
+        private_link_service_id: ref:azure_storage_accounts.staging_ilcentral.id
+        group_ids:
+          - blob
+
+  pe_staging_vnet2:
+    resource_group_name: ref:azure_resource_groups.acme_er.resource_group_name
+    private_endpoint_name: pe-staging-vnet2
+    location: ref:azure_resource_groups.acme_er.location
+    subnet_id: ref:azure_virtual_networks.ergw_vnet_ilcentral.subnet_ids.snet-pe
+    private_link_service_connections:
+      - name: psc-staging-vnet2
+        private_link_service_id: ref:azure_storage_accounts.staging_ilcentral.id
+        group_ids:
+          - blob
+
+  pe_staging_vnet3:
+    resource_group_name: ref:azure_resource_groups.acme_ilcentral.resource_group_name
+    private_endpoint_name: pe-staging-vnet3
+    location: ref:azure_resource_groups.acme_ilcentral.location
+    subnet_id: ref:azure_virtual_networks.pe_vnet3_ilcentral.subnet_ids.snet-pe
+    private_link_service_connections:
+      - name: psc-staging-vnet3
+        private_link_service_id: ref:azure_storage_accounts.staging_ilcentral.id
+        group_ids:
+          - blob

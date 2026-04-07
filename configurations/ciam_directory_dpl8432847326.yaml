@@ -1,0 +1,29 @@
+# CIAM directory (Azure AD for Customers) — tenant dpl8432847326 in Europe
+# Authentication:
+#   export TF_VAR_access_token=$(az account get-access-token --resource https://management.azure.com --query accessToken -o tsv)
+#   export TF_VAR_subscription_id=$(az account show --query id -o tsv)
+#   terraform apply -var="config_file=configurations/ciam_directory_dpl8432847326.yaml"
+
+# ── External references (not managed by Terraform) ──────────────────────────
+# The workforce tenant Dpl32423213324 was created manually via the Azure Portal.
+# Declare it here so managed resources can reference it via ref: expressions.
+externals:
+  azure_tenants:
+    dpl32423213324:
+      tenant_id: "4fcc1d67-2ccc-4e50-99c7-93a41aecbca3"
+      domain: "Dpl32423213324.onmicrosoft.com"
+      location: Europe
+
+# ── Managed resources ────────────────────────────────────────────────────────
+azure_resource_groups:
+  dpl8432847326:
+    resource_group_name: rg-ciam-dpl8432847326
+    location: westeurope
+
+azure_ciam_directories:
+  dpl8432847326:
+    resource_group_name: ref:azure_resource_groups.dpl8432847326.resource_group_name
+    resource_name: dpl8432847326
+    location: ref:externals.azure_tenants.dpl32423213324.location
+    display_name: dpl8432847326
+    country_code: NL

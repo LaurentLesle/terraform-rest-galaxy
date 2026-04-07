@@ -1,0 +1,159 @@
+# Azure Communication Services — Email sending with domain purchase
+#
+# End-to-end scenario:
+#   1. Resource group
+#   2. App Service Domain — purchases the domain (contoso.com)
+#   3. Email Communication Service — email infrastructure
+#   4. DNS Zone — hosts DNS records for the purchased domain
+#   5. Email domain (CustomerManaged) — registers the custom domain with ACS
+#   6. DNS Record Sets — SPF, DKIM, DKIM2 records for email verification
+#   7. Communication Service — linked to the verified custom domain
+#
+# Prerequisites:
+#   - The Microsoft.DomainRegistration, Microsoft.Communication and
+#     Microsoft.Network resource providers must be registered.
+#   - Domain purchase requires legal-agreement consent; fill consent_*
+#     fields below with your own values.
+#
+# Authentication — supply via environment variables:
+#   export TF_VAR_access_token=$(az account get-access-token --resource https://management.azure.com --query accessToken -o tsv)
+#   export TF_VAR_subscription_id=$(az account show --query id -o tsv)
+
+# ── State backend ────────────────────────────────────────────────────────────
+terraform_backend:
+  type: azurerm
+  resource_group_name: rg-terraform-state
+  storage_account_name: stdplstate001
+  container_name: tfstate
+  key: communication_service_email.tfstate
+
+azure_resource_groups:
+  acs_email:
+    resource_group_name: rg-acs-email
+    location: westeurope
+
+# ── Resource provider registrations ──────────────────────────────────────────
+azure_resource_provider_registrations:
+  domainregistration:
+    resource_provider_namespace: Microsoft.DomainRegistration
+  communication:
+    resource_provider_namespace: Microsoft.Communication
+
+# ── Domain purchase ──────────────────────────────────────────────────────────
+azure_app_service_domains:
+  dpl_acsemail:
+    resource_group_name: ref:azure_resource_groups.acs_email.resource_group_name
+    domain_name: dpl-acsemail-test2026.com          # ← replace with your domain
+    location: global
+    contact_admin:
+      first_name: John
+      last_name: Doe
+      email: admin@dpl-acsemail-test2026.com
+      phone: "+1.5551234567"
+      address_line1: "1 Microsoft Way"
+      city: Redmond
+      state: WA
+      country: US
+      postal_code: "98052"
+    contact_billing:
+      first_name: John
+      last_name: Doe
+      email: billing@dpl-acsemail-test2026.com
+      phone: "+1.5551234567"
+      address_line1: "1 Microsoft Way"
+      city: Redmond
+      state: WA
+      country: US
+      postal_code: "98052"
+    contact_registrant:
+      first_name: John
+      last_name: Doe
+      email: registrant@dpl-acsemail-test2026.com
+      phone: "+1.5551234567"
+      address_line1: "1 Microsoft Way"
+      city: Redmond
+      state: WA
+      country: US
+      postal_code: "98052"
+    contact_tech:
+      first_name: John
+      last_name: Doe
+      email: tech@dpl-acsemail-test2026.com
+      phone: "+1.5551234567"
+      address_line1: "1 Microsoft Way"
+      city: Redmond
+      state: WA
+      country: US
+      postal_code: "98052"
+    consent_agreed_by: "203.0.113.10"    # ← your IP address
+    consent_agreed_at: "2026-01-01T00:00:00Z"
+    consent_agreement_keys:
+      - "DNRA"
+    privacy: true
+    auto_renew: true
+
+# ── Email Communication Service ──────────────────────────────────────────────
+azure_email_communication_services:
+  email:
+    resource_group_name: ref:azure_resource_groups.acs_email.resource_group_name
+    email_service_name: acs-email-svc
+    location: global
+    data_location: Europe
+
+# ── DNS Zone (matches the purchased domain) ──────────────────────────────────
+azure_dns_zones:
+  dpl_acsemail:
+    resource_group_name: ref:azure_resource_groups.acs_email.resource_group_name
+    zone_name: ref:azure_app_service_domains.dpl_acsemail.name
+    location: global
+    zone_type: Public
+
+# ── Email domain (customer-managed) ──────────────────────────────────────────
+azure_email_communication_service_domains:
+  custom:
+    resource_group_name: ref:azure_resource_groups.acs_email.resource_group_name
+    email_service_name: ref:azure_email_communication_services.email.name
+    domain_name: ref:azure_app_service_domains.dpl_acsemail.name
+    location: global
+    domain_management: CustomerManaged
+
+# ── DNS Record Sets for email verification ───────────────────────────────────
+# After the first apply, read the verification_records output from the
+# email_communication_service_domain to get the exact TXT / CNAME values,
+# then fill them in below and re-apply. Example placeholder values shown.
+azure_dns_record_sets:
+  spf:
+    resource_group_name: ref:azure_resource_groups.acs_email.resource_group_name
+    zone_name: ref:azure_dns_zones.dpl_acsemail.name
+    record_name: "@"
+    record_type: TXT
+    ttl: 3600
+    txt_records:
+      - value:
+          - ref:azure_email_communication_service_domains.custom.verification_records.SPF.value
+  dkim:
+    resource_group_name: ref:azure_resource_groups.acs_email.resource_group_name
+    zone_name: ref:azure_dns_zones.dpl_acsemail.name
+    record_name: ref:azure_email_communication_service_domains.custom.verification_records.DKIM.name
+    record_type: CNAME
+    ttl: 3600
+    cname_record:
+      cname: ref:azure_email_communication_service_domains.custom.verification_records.DKIM.value
+  dkim2:
+    resource_group_name: ref:azure_resource_groups.acs_email.resource_group_name
+    zone_name: ref:azure_dns_zones.dpl_acsemail.name
+    record_name: ref:azure_email_communication_service_domains.custom.verification_records.DKIM2.name
+    record_type: CNAME
+    ttl: 3600
+    cname_record:
+      cname: ref:azure_email_communication_service_domains.custom.verification_records.DKIM2.value
+
+# ── Communication Service ────────────────────────────────────────────────────
+azure_communication_services:
+  main:
+    resource_group_name: ref:azure_resource_groups.acs_email.resource_group_name
+    communication_service_name: acs-main
+    location: global
+    data_location: Europe
+    linked_domains:
+      - ref:azure_email_communication_service_domains.custom.id

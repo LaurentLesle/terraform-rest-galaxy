@@ -1,0 +1,15 @@
+# Minimum storage account configuration.
+# Authentication — supply via environment variables:
+#   export TF_VAR_access_token=$(az account get-access-token --resource https://management.azure.com --query accessToken -o tsv)
+#   export TF_VAR_subscription_id=$(az account show --query id -o tsv)
+#   export TF_VAR_config_file=config.yaml
+#   terraform init && terraform apply  (from repo root)
+
+storage_accounts:
+  minimum:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: rg-myapp-prod
+    account_name: mystorageacctdev  # optional: omit to use naming convention (name_unique)
+    sku_name: Standard_LRS
+    kind: StorageV2
+    location: westeurope            # optional: omit to use var.naming.location

@@ -1,0 +1,168 @@
+# ── Multi-tenant billing management ──────────────────────────────────────────
+#
+# This configuration manages billing resources in a cross-tenant scenario:
+#
+#   Home tenant (Automation Tenant)     Billing tenant (Acme Engineering)
+#   ─────────────────────────────      ──────────────────────────────────────
+#   1d916846-...                       f9980c27-d8c4-46ee-8a8b-a499ad23381c
+#   ├── caller identity (admin@...)    ├── Billing account: Acme Corp
+#   └── ARM token (default)            ├── Billing role definitions
+#                                      └── ARM token (cross-tenant)
+#
+# The caller (admin@AutomationTenant.onmicrosoft.com) authenticates in their
+# home tenant, then obtains a cross-tenant ARM token for the Acme Engineering
+# tenant where the billing account lives. Externals entries use _tenant to
+# route API calls to the correct token.
+#
+# Authentication:
+#   # 1. Home tenant token (default — for caller_context, azure_tenants, etc.)
+#   export TF_VAR_azure_access_token=$(az account get-access-token \
+#     --resource https://management.azure.com --query accessToken -o tsv)
+#
+#   export TF_VAR_subscription_id=$(az account show --query id -o tsv)
+#
+#   # 2. Billing tenant token (cross-tenant — for billing accounts, role defs)
+# export TF_VAR_graph_access_token=$(az account get-access-token \
+#   --resource https://graph.microsoft.com --query accessToken -o tsv)
+# export TF_VAR_azure_access_token=$(az account get-access-token \
+#   --resource https://management.azure.com --query accessToken -o tsv)
+
+# export TF_VAR_subscription_id=$(az account show --query id -o tsv)
+
+# export TF_VAR_arm_tenant_tokens="{
+#   \"f9980c27-d8c4-46ee-8a8b-a499ad23381c\": \"$(az account get-access-token \
+#     --resource https://management.azure.com \
+#     --tenant Acmenetwork.onmicrosoft.com \
+#     --query accessToken -o tsv)\",
+#   \"4fcc1d67-2ccc-4e50-99c7-93a41aecbca3\": \"$(az account get-access-token \
+#     --resource https://management.azure.com \
+#     --tenant Acmetest.onmicrosoft.com \
+#     --query accessToken -o tsv)\"
+# }"
+
+# terraform apply -var="config_file=configurations/billing_associated_tenant.yaml" -lock=false
+
+# ── Associate an existing tenant with a billing account ──────────────────────
+# References:
+#   https://learn.microsoft.com/en-us/azure/cost-management-billing/manage/manage-billing-across-tenants
+#
+# Prerequisites:
+#   - Microsoft Customer Agreement – Enterprise billing account
+#   - Billing account owner role
+
+externals:
+  azure_tenants:
+    acme_engineering_test:
+      tenant_id: "4fcc1d67-2ccc-4e50-99c7-93a41aecbca3"
+      _exported_attributes: ["*"]
+    acme_engineering:
+      tenant_id: "f9980c27-d8c4-46ee-8a8b-a499ad23381c"
+      _exported_attributes: ["*"]
+
+  azure_billing_accounts:
+    acme_billing:
+      billing_account_name: "01c4287d-052b-4645-a456-7311137dfa03:63cd424a-4af6-415d-a4dc-5cdc9302af95_2019-05-31"
+      _tenant: ref:existing.azure_tenants.acme_engineering.tenant_id
+      _exported_attributes: ["*"]
+
+  azure_billing_scopes:
+    acme_invoice_section:
+      billing_scope_id: "/providers/Microsoft.Billing/billingAccounts/01c4287d-052b-4645-a456-7311137dfa03:63cd424a-4af6-415d-a4dc-5cdc9302af95_2019-05-31/billingProfiles/S7D7-MVDN-BG7-PGB/invoiceSections/725c738a-cadb-4e67-8a8c-8d2c86fdb32d"
+      _tenant: ref:existing.azure_tenants.acme_engineering.tenant_id
+      _exported_attributes: ["*"]
+
+  azure_billing_role_definitions:
+    billing_account_owner:
+      billing_account_name: ref:existing.azure_billing_accounts.acme_billing.billing_account_name
+      role_name: "Billing account owner"
+      _tenant: ref:existing.azure_tenants.acme_engineering.tenant_id
+    billing_account_contributor:
+      billing_account_name: ref:existing.azure_billing_accounts.acme_billing.billing_account_name
+      role_name: "Billing account contributor"
+      _tenant: ref:existing.azure_tenants.acme_engineering.tenant_id
+    billing_account_reader:
+      billing_account_name: ref:existing.azure_billing_accounts.acme_billing.billing_account_name
+      role_name: "Billing account reader"
+      _tenant: ref:existing.azure_tenants.acme_engineering.tenant_id
+
+  azure_billing_scope_role_definitions:
+    subscription_creator:
+      billing_scope: "/providers/Microsoft.Billing/billingAccounts/01c4287d-052b-4645-a456-7311137dfa03:63cd424a-4af6-415d-a4dc-5cdc9302af95_2019-05-31/billingProfiles/S7D7-MVDN-BG7-PGB/invoiceSections/725c738a-cadb-4e67-8a8c-8d2c86fdb32d"
+      role_name: "Azure subscription creator"
+      _tenant: ref:existing.azure_tenants.acme_engineering.tenant_id
+
+  caller_context:
+    current:
+      _exported_attributes: [object_id, tenant_id, name, user_principal_name, principal_type]
+    billing_identity:
+      _tenant: ref:existing.azure_tenants.acme_engineering.tenant_id
+      _exported_attributes: [object_id, tenant_id, name, user_principal_name, principal_type]
+
+
+azure_billing_associated_tenants:
+  acme_engineering_test:
+    billing_account_name: ref:externals.azure_billing_accounts.acme_billing.billing_account_name
+    tenant_id: ref:externals.azure_tenants.acme_engineering_test.tenant_id
+    display_name: "Acme Engineering Test"
+    billing_management_state: Active                              # Active | NotAllowed | Revoked
+    provisioning_management_state: Active                         # Was Pending → approved via portal → now Active
+    _tenant: ref:externals.azure_tenants.acme_engineering.tenant_id
+
+# To comment once approved
+azure_billing_permission_requests:
+  approve_acme_engineering_test:                              # Automatically approve the tenant association
+    associated_tenant: acme_engineering_test
+    status: Approved
+    _tenant: ref:externals.azure_tenants.acme_engineering_test.tenant_id
+
+# ── Subscription in the target tenant ────────────────────────────────────────
+# Creates a subscription under the Acme billing account, provisioned in the
+# associated target tenant (Acme Engineering Test).
+
+azure_subscriptions:
+  acme_test_platform:
+    display_name: "Acme-Test-Security"
+    billing_scope: ref:externals.azure_billing_scopes.acme_invoice_section.billing_scope_id
+    workload: DevTest
+    subscription_tenant_id: ref:externals.azure_tenants.acme_engineering_test.tenant_id
+    _tenant: ref:externals.azure_tenants.acme_engineering.tenant_id 
+
+# ── Platform resources in the target tenant ──────────────────────────────────
+
+azure_resource_provider_registrations:
+  managed_identity:
+    subscription_id: ref:azure_subscriptions.acme_test_platform.subscription_id
+    resource_provider_namespace: Microsoft.ManagedIdentity
+    _tenant: ref:externals.azure_tenants.acme_engineering_test.tenant_id
+
+azure_resource_groups:
+  security:
+    subscription_id: ref:azure_subscriptions.acme_test_platform.subscription_id
+    resource_group_name: rg-security
+    location: westeurope
+    _tenant: ref:externals.azure_tenants.acme_engineering_test.tenant_id
+
+azure_user_assigned_identities:
+  subscription_creator:
+    subscription_id: ref:azure_subscriptions.acme_test_platform.subscription_id
+    resource_group_name: ref:azure_resource_groups.security.resource_group_name
+    identity_name: id-subscription-creator
+    location: westeurope
+    _tenant: ref:externals.azure_tenants.acme_engineering_test.tenant_id
+
+# ── Delegate subscription creation to the managed identity ───────────────────
+# Grants "Azure subscription creator" at the invoice section scope.
+# The POST creates a billingRequest that must be approved by the invoice section
+# owner (see approval_contact). Once approved, remove billing_request_id and
+# re-apply to create the assignment directly.
+
+azure_billing_role_assignments:
+  subscription_creator:
+    billing_account_name: ref:externals.azure_billing_accounts.acme_billing.billing_account_name
+    billing_scope: ref:externals.azure_billing_scopes.acme_invoice_section.billing_scope_id
+    role_definition_id: ref:externals.azure_billing_scope_role_definitions.subscription_creator.id
+    principal_id: ref:azure_user_assigned_identities.subscription_creator.principal_id
+    principal_tenant_id: ref:externals.azure_tenants.acme_engineering_test.tenant_id
+    principal_type: ServicePrincipal
+    _tenant: ref:externals.azure_tenants.acme_engineering.tenant_id
+
