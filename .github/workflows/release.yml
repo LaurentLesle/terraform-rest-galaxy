@@ -116,33 +116,112 @@ jobs:
           ref: ${{ github.ref }}
           fetch-depth: 0
 
-      - name: Generate release body
-        id: body
+      - name: Extract release notes from CHANGELOG.md
+        id: changelog
+        run: |
+          VERSION="${{ needs.validate-release.outputs.version }}"
+          # Extract the section for this version from CHANGELOG.md
+          # Matches from "## [X.Y.Z]" until the next "## [" or end of file
+          NOTES=$(awk -v ver="$VERSION" '
+            /^## \[/ {
+              if (found) exit
+              if (index($0, "[" ver "]")) { found=1; next }
+            }
+            found { print }
+          ' CHANGELOG.md)
+
+          if [ -z "$NOTES" ]; then
+              echo "::warning::No CHANGELOG.md entry found for v$VERSION — falling back to git log"
+              PREV_TAG=$(git describe --tags --abbrev=0 "v$VERSION"^ 2>/dev/null || echo "")
+              if [ -n "$PREV_TAG" ]; then
+                  COMMITS=$(git log "$PREV_TAG".."v$VERSION" --oneline | head -50)
+              else
+                  COMMITS=$(git log "v$VERSION" --oneline | head -50)
+              fi
+              NOTES=$(cat <<INNER
+### Changes (auto-generated from commits)
+
+> **Note**: This release has no structured CHANGELOG entry.
+> Future releases should update CHANGELOG.md before tagging.
+
+\`\`\`
+${COMMITS}
+\`\`\`
+INNER
+              )
+          fi
+
+          # Write multi-line output
+          {
+            echo "notes<<RELEASE_EOF"
+            echo "$NOTES"
+            echo "RELEASE_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Classify commit types for summary
+        id: summary
         run: |
           VERSION="${{ needs.validate-release.outputs.version }}"
           TAG="v$VERSION"
           PREV_TAG=$(git describe --tags --abbrev=0 "$TAG"^ 2>/dev/null || echo "")
+
+          BREAKING=0; FEAT=0; FIX=0; OTHER=0
           if [ -n "$PREV_TAG" ]; then
-              CHANGELOG=$(git log "$PREV_TAG".."$TAG" --oneline | head -50)
+              RANGE="$PREV_TAG..$TAG"
           else
-              CHANGELOG=$(git log "$TAG" --oneline | head -50)
+              RANGE="$TAG"
           fi
+
+          while IFS= read -r msg; do
+              case "$msg" in
+                  *"BREAKING CHANGE"*|*"!"*:*) BREAKING=$((BREAKING+1)) ;;
+                  feat*) FEAT=$((FEAT+1)) ;;
+                  fix*) FIX=$((FIX+1)) ;;
+                  *) OTHER=$((OTHER+1)) ;;
+              esac
+          done < <(git log "$RANGE" --format="%s")
+
+          if [ "$BREAKING" -gt 0 ]; then
+              PRIORITY="🔴 Critical — contains breaking changes"
+          elif [ "$FEAT" -gt 0 ]; then
+              PRIORITY="🟡 Recommended — new features"
+          else
+              PRIORITY="🟢 Optional — bug fixes and maintenance"
+          fi
+
           {
-            echo "body<<EOF"
-            echo "## Release $TAG"
+            echo "priority<<PRIO_EOF"
+            echo "$PRIORITY"
+            echo "PRIO_EOF"
+            echo "breaking=$BREAKING"
+            echo "features=$FEAT"
+            echo "fixes=$FIX"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build release body
+        id: body
+        run: |
+          VERSION="${{ needs.validate-release.outputs.version }}"
+          {
+            echo "body<<BODY_EOF"
+            echo "## v$VERSION"
             echo ""
-            echo "### Changes"
-            echo '```'
-            echo "$CHANGELOG"
-            echo '```'
-            echo "EOF"
+            echo "### Upgrade Priority"
+            echo "${{ steps.summary.outputs.priority }}"
+            echo ""
+            echo "${{ steps.changelog.outputs.notes }}"
+            echo ""
+            echo "---"
+            echo ""
+            echo "_Commit stats: ${{ steps.summary.outputs.breaking }} breaking, ${{ steps.summary.outputs.features }} features, ${{ steps.summary.outputs.fixes }} fixes_"
+            echo "BODY_EOF"
           } >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          name: "Release v${{ needs.validate-release.outputs.version }}"
+          name: "v${{ needs.validate-release.outputs.version }}"
           body: ${{ steps.body.outputs.body }}
           draft: false
           prerelease: ${{ needs.validate-release.outputs.is_prerelease }}
