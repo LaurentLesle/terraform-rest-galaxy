@@ -13,8 +13,6 @@
 #
 # Required: kind CLI + Docker running.
 
-provider "kind" {}
-
 provider "rest" {
   alias    = "k8s"
   base_url = "https://127.0.0.1"
