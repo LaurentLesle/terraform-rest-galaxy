@@ -25,10 +25,10 @@ run "plan_vwan_secure_hub_routing_intent" {
   command = plan
 
   variables {
-    azure_access_token  = var.access_token
-    graph_access_token  = var.graph_access_token
-    config_file         = "configurations/vwan_secure_hub_routing_intent.yaml"
-    subscription_id     = var.subscription_id
+    azure_access_token = var.access_token
+    graph_access_token = var.graph_access_token
+    config_file        = "configurations/vwan_secure_hub_routing_intent.yaml"
+    subscription_id    = var.subscription_id
   }
 
   # Resource group
