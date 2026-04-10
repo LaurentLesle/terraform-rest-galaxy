@@ -62,7 +62,7 @@ output "azure_values" {
 
 output "github_values" {
   description = "Map of all GitHub module outputs, keyed by the same keys as var.*. Empty maps are filtered out."
-  value = length(local._github_values) > 0 ? local._github_values : null
+  value       = length(local._github_values) > 0 ? local._github_values : null
 }
 
 locals {

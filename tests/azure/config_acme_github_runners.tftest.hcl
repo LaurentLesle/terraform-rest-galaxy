@@ -31,11 +31,11 @@ run "plan_acme_github_runners" {
   command = plan
 
   variables {
-    azure_access_token  = var.access_token
-    graph_access_token  = var.graph_access_token
-    github_token        = var.github_token
-    config_file         = "configurations/acme_github_runners.yaml"
-    subscription_id     = var.subscription_id
+    azure_access_token = var.access_token
+    graph_access_token = var.graph_access_token
+    github_token       = var.github_token
+    config_file        = "configurations/acme_github_runners.yaml"
+    subscription_id    = var.subscription_id
   }
 
   # Resource group exists
