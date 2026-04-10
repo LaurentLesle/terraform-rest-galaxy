@@ -1,0 +1,53 @@
+name: Generate Docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "azure_*.tf"
+      - "entraid_*.tf"
+      - "github_*.tf"
+      - "k8s_*.tf"
+      - "scripts/generate-docs.py"
+  pull_request:
+    branches: [main]
+    paths:
+      - "azure_*.tf"
+      - "entraid_*.tf"
+      - "github_*.tf"
+      - "k8s_*.tf"
+      - "scripts/generate-docs.py"
+  workflow_dispatch:
+
+jobs:
+  docs:
+    name: "Regenerate YAML reference"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.ref || github.ref }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Generate docs/yaml-reference.md
+        run: python3 scripts/generate-docs.py
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/yaml-reference.md docs/yaml-reference-azure.md docs/yaml-reference-entraid.md docs/yaml-reference-github.md docs/yaml-reference-k8s.md
+          if git diff --staged --quiet; then
+            echo "No documentation changes."
+          else
+            git commit -m "docs: regenerate yaml-reference.md [skip ci]"
+            git push
+          fi

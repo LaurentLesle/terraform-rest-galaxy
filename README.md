@@ -138,6 +138,8 @@ CI runs automatically on push to `main` via GitHub Actions.
 
 ## Documentation
 
+- [YAML Configuration Reference](docs/yaml-reference.md) — all 78 resources with attributes and YAML examples ([Azure](docs/yaml-reference-azure.md) · [Entra ID](docs/yaml-reference-entraid.md) · [GitHub](docs/yaml-reference-github.md) · [Kubernetes](docs/yaml-reference-k8s.md))
+- [Cross-References and Externals](docs/references.md) — `ref:`, `externals`, `remote_states`, `caller`
 - [Consumer Documentation](.github/CONSUMER_DOCUMENTATION.md) — setup guide for config repo teams
 - [Version Upgrade Guide](.github/VERSION_UPGRADE_GUIDE.md) — safe upgrade procedures
 - [Backend Interface Contract](.github/BACKEND_INTERFACE_CONTRACT.md) — state backend validation rules
