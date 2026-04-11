@@ -120,11 +120,22 @@ jobs:
       - name: Run plan-only tests (tests/)
         env:
           TF_VAR_access_token: "placeholder"
+          TF_VAR_subscription_id: "00000000-0000-0000-0000-000000000000"
         run: |
-          # Auto-discover: GitHub unit tests + all integration_config_* tests (command = plan)
+          # GitHub unit tests — always plan-safe (no Azure provider_check)
           filters=()
-          for f in tests/unit_github_*.tftest.hcl tests/integration_config_*.tftest.hcl; do
+          for f in tests/unit_github_*.tftest.hcl; do
             [ -f "$f" ] && filters+=("-filter=$f")
+          done
+          # integration_config_* tests — only include those whose corresponding
+          # configurations/<name>.yaml exists and has no externals block.
+          # (externals require live ARM API calls and fail with a placeholder token)
+          for f in tests/integration_config_*.tftest.hcl; do
+            name=$(basename "$f" .tftest.hcl | sed 's/^integration_config_//')
+            yaml="configurations/${name}.yaml"
+            if [ -f "$yaml" ] && ! grep -q "^externals:" "$yaml"; then
+              filters+=("-filter=$f")
+            fi
           done
           if [ ${#filters[@]} -gt 0 ]; then
             terraform test "${filters[@]}"
@@ -170,6 +181,8 @@ jobs:
         env:
           TF_VAR_access_token: "placeholder"
           TF_VAR_config_file: "configurations/${{ matrix.config }}.yaml"
+          # Placeholder subscription_id for configs that don't embed one in their YAML
+          TF_VAR_subscription_id: "00000000-0000-0000-0000-000000000000"
         run: terraform plan -input=false -no-color
 
   # ── Apply tests — require Azure credentials ────────────────────────────────
