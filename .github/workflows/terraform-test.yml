@@ -57,17 +57,15 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       configs: ${{ steps.list.outputs.configs }}
+      live_configs: ${{ steps.list.outputs.live_configs }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: List plan-safe configs
+      - name: List plan-safe and live-token configs
         id: list
         run: |
-          # Exclude configs that require a live ARM token:
-          #   - top-level externals: blocks (live ARM API calls at plan time)
-          #   - # ci:requires-live-token marker (e.g. import configs with check_existance)
-          # Output basenames without .yaml for clean matrix job names.
+          # Plan-safe: no externals: block, no # ci:requires-live-token marker.
           configs=$(grep -rL "^externals:" configurations/*.yaml \
             | xargs grep -rL "^# ci:requires-live-token" \
             | sort \
@@ -75,6 +73,17 @@ jobs:
             | jq -R -s -c 'split("\n") | map(select(. != ""))')
           echo "configs=$configs" >> "$GITHUB_OUTPUT"
           echo "Discovered $(echo "$configs" | jq -r 'length') plan-safe configs"
+
+          # Live-token: configs excluded from plan-safe (have externals: or ci:requires-live-token).
+          all_configs=$(ls configurations/*.yaml | sort \
+            | xargs -I{} basename {} .yaml \
+            | jq -R -s -c 'split("\n") | map(select(. != ""))')
+          live_configs=$(jq -n \
+            --argjson all "$all_configs" \
+            --argjson safe "$configs" \
+            '$all - $safe')
+          echo "live_configs=$live_configs" >> "$GITHUB_OUTPUT"
+          echo "Discovered $(echo "$live_configs" | jq -r 'length') live-token configs"
 
   # ── Discover test files for plan-test and apply-test matrices ───────────────
   generate-test-matrix:
@@ -354,14 +363,19 @@ jobs:
             terraform test -filter="${{ matrix.test.file }}"
           fi
 
-  # ── Plan all configs with live token ────────────────────────────────────────
-  # Validates externals + ci:requires-live-token configs skipped by plan-config.
+  # ── Plan live-token configs (matrix) ────────────────────────────────────────
+  # Validates configs with externals: or # ci:requires-live-token that are
+  # skipped by plan-config. Each config gets its own runner.
   # Runs only on push to main.
-  plan-all-configs:
-    name: "Plan all configs (live token)"
-    needs: build-provider
+  plan-config-live:
+    name: "Plan ${{ matrix.config }} (live)"
+    needs: [build-provider, generate-config-matrix]
     runs-on: ubuntu-latest
     if: github.event_name != 'pull_request'
+    strategy:
+      fail-fast: false
+      matrix:
+        config: ${{ fromJson(needs.generate-config-matrix.outputs.live_configs) }}
     permissions:
       id-token: write   # OIDC
       contents: read
@@ -403,17 +417,9 @@ jobs:
           echo "::add-mask::$TOKEN"
           echo "access_token=$TOKEN" >> "$GITHUB_OUTPUT"
 
-      - name: Plan all configuration YAMLs
+      - name: Plan configurations/${{ matrix.config }}.yaml
         env:
           TF_VAR_access_token: ${{ steps.token.outputs.access_token }}
+          TF_VAR_config_file: "configurations/${{ matrix.config }}.yaml"
           TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-        run: |
-          # Live token resolves externals blocks — plan ALL configs including those
-          # skipped by the plan-config matrix job.
-          failed=0
-          for config in configurations/*.yaml; do
-            echo "=== Plan: $config ==="
-            TF_VAR_config_file="$config" terraform plan -input=false -no-color \
-              || { echo "FAILED: $config"; failed=$((failed + 1)); }
-          done
-          [ "$failed" -eq 0 ] || { echo "$failed configuration(s) failed to plan"; exit 1; }
+        run: terraform plan -input=false -no-color
