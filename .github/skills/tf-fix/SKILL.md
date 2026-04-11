@@ -1,6 +1,6 @@
 ---
 name: tf-fix
-description: "Audit and fix existing Terraform modules against the Azure REST API spec. Use when: module drift, fix module, update api version, missing property, missing output, fix polling, fix test, tf_fix, audit module, sync spec, gap analysis, reconcile module, update module from spec, fix storage_account, fix resource_group, module out of date, spec drift, missing pending state"
+description: "Audit and fix existing Terraform modules against the Azure REST API spec. Use when: module drift, fix module, update api version, missing property, missing output, fix polling, fix test, tf_fix, audit module, sync spec, gap analysis, reconcile module, update module from spec, fix storage_account, fix resource_group, module out of date, spec drift, missing pending state, promote to hero, hero module, hero quality, full property coverage, add validation rules"
 argument-hint: "Module name to audit (e.g. 'resource_group', 'storage_account') or 'all' for every module"
 ---
 
@@ -18,6 +18,7 @@ Audit one or more Terraform modules against the Azure REST API specification, id
 - Root module wiring (`azure_<plural>.tf`, `config.tf`, `azure_outputs.tf`) is out of sync with sub-modules
 - Example configurations don't match the current module surface area
 - You want a full gap analysis report before making changes
+- **You want to promote a module to hero quality** (see Hero Mode below)
 
 ## Source of Truth
 
@@ -109,6 +110,16 @@ For each module, read all files and compare against the rules defined in `.githu
 | **`azure_outputs.tf`** | `output "values"` map includes `<plural> = module.<plural>` |
 | **`azure_<plural>.tf`** | Variable `type = map(object({...}))` has attributes matching every sub-module variable; module block passes all attributes; `for_each` references `local.<plural>` (not `var.<plural>`) |
 
+#### 2f. Configuration YAML files (`configurations/*.yaml`)
+
+For every configuration YAML that corresponds to the module under audit (or for all configs when scope is `all`):
+
+| Check | What to verify |
+|-------|---------------|
+| **`terraform_backend` present** | File contains a `terraform_backend:` block immediately after the header comment |
+| **`type: local` for local execution** | Default type is `local` with `path: <scenario_name>.tfstate` unless a remote backend has been deliberately configured |
+| **Key uniqueness** | `path` / `key` value is unique — no two configs share the same state file path |
+
 #### 2c. Examples (`examples/azure/<name>/minimum/` and `examples/azure/<name>/complete/`)
 
 | Check | What to verify |
@@ -185,7 +196,15 @@ For each gap identified, apply the fix following the conventions in the agent sp
    ```
    error_message = "Resource provider <Namespace> is not registered on subscription ${var.subscription_id}. Add to your config YAML:\n\n  azure_resource_provider_registrations:\n    <short_name>:\n      resource_provider_namespace: <Namespace>"
    ```
-11. **Missing `force_new_attrs`** → For immutable properties (spec `x-ms-mutability: ["create", "read"]` or 400 `*UpdateNotPermitted`), add `force_new_attrs = toset(["properties.<field>"])`. See [Pattern #19](../../patterns/rest-provider-patterns.md#19-force_new_attrs--immutable-body-properties).
+11. **Missing `terraform_backend` in configuration YAML** → Insert a `terraform_backend` block immediately after the header comment:
+    ```yaml
+    # ── State backend ────────────────────────────────────────────────────────────
+    terraform_backend:
+      type: local
+      path: <scenario_name>.tfstate
+    ```
+    Use `<scenario_name>` = filename without extension. Confirm the path is unique across all configurations.
+12. **Missing `force_new_attrs`** → For immutable properties (spec `x-ms-mutability: ["create", "read"]` or 400 `*UpdateNotPermitted`), add `force_new_attrs = toset(["properties.<field>"])`. See [Pattern #19](../../patterns/rest-provider-patterns.md#19-force_new_attrs--immutable-body-properties).
 
 After each fix, run `terraform fmt -recursive` on affected directories.
 
@@ -199,6 +218,32 @@ terraform validate
 ```
 
 Fix any errors before proceeding.
+
+### Step 5b — Plan configuration files
+
+For every configuration YAML in `configurations/` that uses the module under audit (or all configs when scope is `all`), run a real plan using `./tf.sh`:
+
+```bash
+./tf.sh plan configurations/<scenario_name>.yaml
+```
+
+This validates that the configuration produces a clean plan end-to-end — provider resolution, ref wiring, body construction, and precondition checks. A clean `terraform validate` is necessary but not sufficient; plan-time errors (type mismatches in locals, missing attributes, precondition failures) only surface here.
+
+**Pass criteria:** `terraform plan` exits 0 with the expected resources in the plan. No errors, no unexpected changes.
+
+If a plan fails:
+1. Read the error — it is almost always precise about file, line, and expression
+2. Common plan-time failures and fixes:
+
+| Error | Root cause | Fix |
+|---|---|---|
+| `Unsupported attribute` on `each.value.X` | YAML doesn't set field `X`; module wiring uses `.X` instead of `try(.X, fallback)` | Change root wiring to `try(each.value.X, fallback)` |
+| `Inconsistent conditional result types` | Polymorphic ternary branches have different object shapes | Use `jsondecode(jsonencode({...}))` to coerce each branch to `any` before passing to `merge()` |
+| `Resource precondition failed` — backend_safety | `terraform_backend.resource_group_name` is empty string (local backend), matching all RG keys via `try(v.resource_group_name, "")` | Guard with `!= ""` before comparing: `try(local._terraform_backend.resource_group_name, "") != ""` |
+| `Missing terraform_backend` | Config has no state block | Add `terraform_backend: type: local` — see fix #11 |
+| Precondition failed — provider not registered | The ARM provider isn't registered in the test subscription | Register the provider or adjust test variables | 
+
+After fixing plan errors, re-run `terraform validate` and `./tf.sh plan` to confirm both pass.
 
 ### Step 6 — Run tests
 
@@ -265,8 +310,93 @@ These are recurring issues discovered during development of this repo:
 | `poll_delete` treats 404 as failure | `Error: Polling failure` during destroy after resource is successfully deleted | Change `poll_delete` to `success = "404"`, `pending = ["200", "202"]` — see [Pattern #15](../../patterns/rest-provider-patterns.md#15-arm-poll_delete--404-means-success) |
 | K8s namespace label drift | 3 namespaces show "will be updated" on every plan (removing `kubernetes.io/metadata.name` label) | Include auto-injected label in body: `merge({"kubernetes.io/metadata.name" = var.name}, var.labels)` — see [Pattern #16](../../patterns/rest-provider-patterns.md#16-kubernetes-server-side-mutations--preventing-body-drift) |
 | K8s destroy 403 `system:anonymous` | `ephemeral_header` not available during Delete — K8s resources can't authenticate for deletion | Switch to `header` (not `ephemeral_header`) + track token expiry to prevent drift — see [Pattern #14](../../patterns/rest-provider-patterns.md#14-ephemeral_header--not-available-during-delete) and [Pattern #17](../../patterns/rest-provider-patterns.md#17-token-expiry-tracking--preventing-auth-header-drift) |
+| Missing `terraform_backend` in config YAML | `terraform init` prompts for backend or defaults to a shared local path; no state isolation between configs | Add `terraform_backend: type: local` block after the header comment — see fix #11 above |
 | Immutable property update rejected | `400 RoleAssignmentUpdateNotPermitted` or `400 *CannotBeChanged` on apply after a property value change | Add `force_new_attrs = toset(["properties.<field>"])` to the `rest_resource` block — see [Pattern #19](../../patterns/rest-provider-patterns.md#19-force_new_attrs--immutable-body-properties) |
 | Concurrent write 409 on apply | `409 Concurrent*` when creating multiple child resources on the same parent (e.g. FICs on a UAI) | Configure `client.retry` with 409 in `status_codes` on the provider block — see [Pattern #20](../../patterns/rest-provider-patterns.md#20-provider-level-retry-for-transient-errors) |
+
+## Hero Mode — Promoting a Module to Hero Quality
+
+When the user asks to **promote a module to hero quality** (or uses the phrase "hero module"), run the standard audit (Steps 0–7) and additionally enforce the following criteria:
+
+### What is a hero module?
+
+A hero module provides exhaustive coverage of its resource type:
+
+| Criterion | Standard module | Hero module |
+|-----------|----------------|-------------|
+| **Properties** | Common writable properties | **All** writable properties from the spec exposed as variables |
+| **Examples** | `minimum/` only or basic `complete/` | Extended `complete/` covering every variable group; named variants if needed |
+| **Configurations** | 0–1 YAML files | **Multiple** `configurations/*.yaml` files showing different permutations and real-world scenarios |
+| **Variable validation** | No validation rules | `validation` blocks derived from spec constraints (enums, length limits, regex patterns) |
+
+### Additional hero checks (after Step 2)
+
+#### H1 — Full property coverage
+
+Read the full spec for the resource and list every writable property. For each:
+- If the property is missing from `variables.tf`, add it with the correct type, `default = null`, and a `description` quoting the spec description.
+- Add it to `body` in `main.tf`.
+- Add it to the `map(object({...}))` in the root `azure_<plural>.tf`.
+
+#### H2 — Variable validation rules
+
+For every variable that maps to a spec property with constraints, add a `validation` block:
+
+| Spec constraint | Terraform validation |
+|----------------|----------------------|
+| `enum: [a, b, c]` | `condition = contains(["a","b","c"], var.x)` |
+| `minLength: N` | `condition = length(var.x) >= N` |
+| `maxLength: N` | `condition = length(var.x) <= N` |
+| `pattern: "^[a-z]..."` | `condition = can(regex("^[a-z]...", var.x))` |
+| `minimum: N` / `maximum: N` | `condition = var.x >= N && var.x <= N` |
+
+Only add validations where the constraint is explicit in the spec. Do not invent constraints.
+
+For nullable optional variables (those with `default = null`), guard the validation with a null check:
+```hcl
+validation {
+  condition     = var.x == null || length(var.x) <= 24
+  error_message = "x must be at most 24 characters."
+}
+```
+
+#### H3 — Extended complete example
+
+Update `examples/azure/<name>/complete/` so that:
+- Every variable group is exercised (not just required fields).
+- `config.yaml.example` contains meaningful example values for every property (use spec examples or sensible defaults).
+- The example is self-documenting: a reader should understand all configuration options from the example alone.
+
+#### H4 — Multiple configuration files
+
+Ensure at least **two** `configurations/*.yaml` files exist that exercise the module, each demonstrating a distinct scenario or set of options. For example:
+- `configurations/<name>_basic.yaml` — minimal viable deployment
+- `configurations/<name>_<variant>.yaml` — advanced scenario (e.g. with encryption, private endpoint, RBAC)
+
+Each configuration file must have a matching `tests/integration_config_<scenario_name>.tftest.hcl` test.
+
+### Hero completion criteria
+
+A module is considered hero quality when:
+- [ ] All writable spec properties are exposed as variables
+- [ ] All optional variables have `validation` blocks where the spec defines constraints
+- [ ] `complete/` example exercises every variable group
+- [ ] At least two `configurations/*.yaml` files exist with distinct scenarios
+- [ ] All configuration tests pass (`terraform test`)
+- [ ] A plan runs cleanly for every configuration YAML (`./tf.sh plan`)
+- [ ] The **Hero Modules** table in `README.md` is updated (see below)
+
+### Updating the Hero Modules table
+
+Once all criteria above are met, add a row to the **Hero Modules** table in `README.md`:
+
+```markdown
+| `<module_name>` | Azure | `configurations/<name>_basic.yaml`, `configurations/<name>_<variant>.yaml` | <one-line note> |
+```
+
+Remove the placeholder row `*(none yet — ...)` if it is still present.
+
+---
 
 ## Constraints
 
