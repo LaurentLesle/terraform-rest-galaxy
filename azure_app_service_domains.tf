@@ -2,14 +2,74 @@
 
 variable "azure_app_service_domains" {
   type = map(object({
-    subscription_id        = optional(string)
-    resource_group_name    = string
-    domain_name            = string
-    location               = optional(string, "global")
-    contact_admin          = object({ first_name = string, last_name = string, email = string, phone = string, organization = optional(string), job_title = optional(string), fax = optional(string), middle_name = optional(string), address_line1 = optional(string), address_line2 = optional(string), city = optional(string), state = optional(string), country = optional(string), postal_code = optional(string) })
-    contact_billing        = object({ first_name = string, last_name = string, email = string, phone = string, organization = optional(string), job_title = optional(string), fax = optional(string), middle_name = optional(string), address_line1 = optional(string), address_line2 = optional(string), city = optional(string), state = optional(string), country = optional(string), postal_code = optional(string) })
-    contact_registrant     = object({ first_name = string, last_name = string, email = string, phone = string, organization = optional(string), job_title = optional(string), fax = optional(string), middle_name = optional(string), address_line1 = optional(string), address_line2 = optional(string), city = optional(string), state = optional(string), country = optional(string), postal_code = optional(string) })
-    contact_tech           = object({ first_name = string, last_name = string, email = string, phone = string, organization = optional(string), job_title = optional(string), fax = optional(string), middle_name = optional(string), address_line1 = optional(string), address_line2 = optional(string), city = optional(string), state = optional(string), country = optional(string), postal_code = optional(string) })
+    subscription_id     = optional(string)
+    resource_group_name = string
+    domain_name         = string
+    location            = optional(string, "global")
+    contact_admin = object({
+      first_name    = string
+      last_name     = string
+      email         = string
+      phone         = string
+      organization  = optional(string)
+      job_title     = optional(string)
+      fax           = optional(string)
+      middle_name   = optional(string)
+      address_line1 = optional(string)
+      address_line2 = optional(string)
+      city          = optional(string)
+      state         = optional(string)
+      country       = optional(string)
+      postal_code   = optional(string)
+    })
+    contact_billing = object({
+      first_name    = string
+      last_name     = string
+      email         = string
+      phone         = string
+      organization  = optional(string)
+      job_title     = optional(string)
+      fax           = optional(string)
+      middle_name   = optional(string)
+      address_line1 = optional(string)
+      address_line2 = optional(string)
+      city          = optional(string)
+      state         = optional(string)
+      country       = optional(string)
+      postal_code   = optional(string)
+    })
+    contact_registrant = object({
+      first_name    = string
+      last_name     = string
+      email         = string
+      phone         = string
+      organization  = optional(string)
+      job_title     = optional(string)
+      fax           = optional(string)
+      middle_name   = optional(string)
+      address_line1 = optional(string)
+      address_line2 = optional(string)
+      city          = optional(string)
+      state         = optional(string)
+      country       = optional(string)
+      postal_code   = optional(string)
+    })
+    contact_tech = object({
+      first_name    = string
+      last_name     = string
+      email         = string
+      phone         = string
+      organization  = optional(string)
+      job_title     = optional(string)
+      fax           = optional(string)
+      middle_name   = optional(string)
+      address_line1 = optional(string)
+      address_line2 = optional(string)
+      city          = optional(string)
+      state         = optional(string)
+      country       = optional(string)
+      postal_code   = optional(string)
+    })
     consent_agreed_by      = string
     consent_agreed_at      = string
     consent_agreement_keys = optional(list(string), [])
