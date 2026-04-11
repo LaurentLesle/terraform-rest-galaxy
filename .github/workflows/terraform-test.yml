@@ -170,7 +170,7 @@ jobs:
         env:
           TF_VAR_access_token: "placeholder"
           TF_VAR_config_file: "configurations/${{ matrix.config }}.yaml"
-        run: terraform plan -backend=false -input=false -no-color
+        run: terraform plan -input=false -no-color
 
   # ── Apply tests — require Azure credentials ────────────────────────────────
   apply-tests:
@@ -263,7 +263,7 @@ jobs:
           failed=0
           for config in configurations/*.yaml; do
             echo "=== Plan: $config ==="
-            TF_VAR_config_file="$config" terraform plan -backend=false -input=false -no-color \
+            TF_VAR_config_file="$config" terraform plan -input=false -no-color \
               || { echo "FAILED: $config"; failed=$((failed + 1)); }
           done
           [ "$failed" -eq 0 ] || { echo "$failed configuration(s) failed to plan"; exit 1; }

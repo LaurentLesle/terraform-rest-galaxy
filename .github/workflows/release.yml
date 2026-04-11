@@ -126,7 +126,7 @@ jobs:
         env:
           TF_VAR_access_token: "placeholder"
           TF_VAR_config_file: "configurations/${{ matrix.config }}.yaml"
-        run: terraform plan -backend=false -input=false -no-color
+        run: terraform plan -input=false -no-color
 
   # ── Run plan-only tests ────────────────────────────────────────────────────
   tests:
