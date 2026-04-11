@@ -264,11 +264,58 @@ jobs:
             terraform test -filter="${{ matrix.test.file }}"
           fi
 
+  # ── Regenerate docs before publishing ────────────────────────────────────
+  # Runs generate-docs.py and terraform-docs so the release snapshot always
+  # has up-to-date YAML reference and module READMEs, even if the docs workflow
+  # hadn't committed yet when the tag was pushed.
+  regenerate-docs:
+    name: "Regenerate docs"
+    runs-on: ubuntu-latest
+    needs: validate-release
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Generate YAML reference docs
+        run: python3 scripts/generate-docs.py
+
+      - name: Setup terraform-docs
+        uses: terraform-docs/gh-actions@v1
+        with:
+          working-dir: .
+          recursive: true
+          recursive-path: modules
+          output-file: README.md
+          output-method: replace
+          git-push: "false"
+
+      - name: Commit and push docs if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/ modules/
+          if git diff --staged --quiet; then
+            echo "No documentation changes."
+          else
+            git commit -m "docs: regenerate yaml-reference and module READMEs for ${{ github.ref_name }} [skip ci]"
+            git push origin HEAD:main
+          fi
+
   # ── Create release ─────────────────────────────────────────────────────────
   release:
     name: "Create release"
     runs-on: ubuntu-latest
-    needs: [validate-release, validate, validate-example, plan-config, plan-test]
+    needs: [validate-release, validate, validate-example, plan-config, plan-test, regenerate-docs]
     permissions:
       contents: write
     steps:

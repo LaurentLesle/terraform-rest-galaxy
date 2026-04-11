@@ -1731,42 +1731,44 @@ azure_routing_intents:
 
 **API version:** `2025-08-01`
 
-Manages the blob service properties for a storage account (soft delete, versioning, change feed, CORS, point-in-time restore, etc.).
+Map of blob service configurations to apply to storage accounts. Each map key acts as
+the for_each identifier and must be unique within this configuration.
+
+Only one blob service configuration exists per storage account (singleton pattern).
+The resource_group_name and account_name identify the parent storage account.
 
 #### Attributes
 
 | Name | Type | Required | Default | Description |
 |------|------|:--------:|---------|-------------|
-| `subscription_id` | `string` | yes | — | The Azure subscription ID that contains the storage account. |
-| `resource_group_name` | `string` | yes | — | The name of the resource group that contains the storage account. |
-| `account_name` | `string` | yes | — | The name of the storage account whose blob service configuration to manage. |
-| `cors_rules` | `list(object)` | no | `null` | List of CORS rules for the blob service. |
-| `delete_retention_policy` | `object` | no | `null` | Soft delete policy for blobs (enabled, days, allow_permanent_delete). |
-| `container_delete_retention_policy` | `object` | no | `null` | Soft delete policy for containers (enabled, days). |
-| `is_versioning_enabled` | `bool` | no | `null` | Enable blob versioning. |
-| `change_feed_enabled` | `bool` | no | `null` | Enable the blob storage change feed. |
-| `change_feed_retention_in_days` | `number` | no | `null` | Duration in days that change feed events are retained (1–146000). |
-| `restore_policy_enabled` | `bool` | no | `null` | Enable point-in-time restore for block blobs. |
-| `restore_policy_days` | `number` | no | `null` | How far back in days point-in-time restore can be performed (1–365). |
-| `last_access_time_tracking_enabled` | `bool` | no | `null` | Enable last access time tracking policy for blobs. |
-| `last_access_tracking_granularity_in_days` | `number` | no | `null` | Granularity in days for last access time tracking. |
-| `automatic_snapshot_policy_enabled` | `bool` | no | `null` | Enable automatic snapshot policy for blobs. |
-| `default_service_version` | `string` | no | `null` | The default version of the blob service (e.g. `2020-06-12`). |
-| `check_existance` | `bool` | no | `false` | When true, performs GET before PUT for brownfield import workflows. |
+| `subscription_id` | `string` | no | `null` |  |
+| `resource_group_name` | `string` | yes | — |  |
+| `account_name` | `string` | yes | — |  |
+| `cors_rules` | `list(object)` | no | `null` |  |
+| `delete_retention_policy` | `object` | no | `null` |  |
+| `container_delete_retention_policy` | `object` | no | `null` |  |
+| `is_versioning_enabled` | `bool` | no | `null` |  |
+| `change_feed_enabled` | `bool` | no | `null` |  |
+| `change_feed_retention_in_days` | `number` | no | `null` |  |
+| `restore_policy_enabled` | `bool` | no | `null` |  |
+| `restore_policy_days` | `number` | no | `null` |  |
+| `last_access_time_tracking_enabled` | `bool` | no | `null` |  |
+| `last_access_tracking_granularity_in_days` | `number` | no | `null` |  |
+| `automatic_snapshot_policy_enabled` | `bool` | no | `null` |  |
+| `default_service_version` | `string` | no | `null` |  |
+| `_tenant` | `string` | no | `null` |  |
+| `check_existance` | `bool` | no | `false` |  |
 
 #### YAML Example
 
 ```yaml
 azure_storage_account_blob_services:
-  app:
-    resource_group_name: ref:azure_resource_groups.app.resource_group_name
-    account_name: ref:azure_storage_accounts.app.account_name
+  app_blobs:
+    resource_group_name: "rg-myapp"
+    account_name: "mystorageaccount"
     delete_retention_policy:
       enabled: true
-      days: 14
-    container_delete_retention_policy:
-      enabled: true
-      days: 14
+      days: 7
     is_versioning_enabled: true
     change_feed_enabled: true
 ```
@@ -1777,35 +1779,47 @@ azure_storage_account_blob_services:
 
 **API version:** `2026-06-06`
 
-Manages individual block blobs using the Azure Storage data-plane API.
+Map of blobs to create or manage in Azure Blob Storage (data-plane API).
+Each map key acts as the for_each identifier and must be unique.
+
+All blobs must belong to the same storage account (var.storage_account_name).
+For blobs in different accounts, use separate Terraform configurations.
+
+Auth modes:
+  "token" — Azure AD bearer token (scope: https://storage.azure.com/.default)
+            Set var.storage_access_token to supply the token.
+  "sas"   — SAS token per blob. Set sas_token on each entry.
 
 #### Attributes
 
 | Name | Type | Required | Default | Description |
 |------|------|:--------:|---------|-------------|
-| `account_name` | `string` | yes | — | The storage account name. Used to construct the data-plane base URL. |
-| `container_name` | `string` | yes | — | The name of the blob container that holds the blob. |
-| `blob_name` | `string` | yes | — | The name (path within the container) of the blob to manage. |
-| `blob_type` | `string` | no | `"BlockBlob"` | The type of blob to create. Only `BlockBlob` is supported. |
-| `content` | `string` | no | `null` | The text/JSON content to upload as the blob body. Sensitive. |
-| `content_type` | `string` | no | `"application/octet-stream"` | MIME type for the blob. |
-| `metadata` | `map(string)` | no | `null` | User-defined metadata for the blob. |
-| `access_tier` | `string` | no | `null` | Blob access tier: Hot, Cool, Cold, or Archive. |
-| `auth_mode` | `string` | no | `"token"` | Authentication mode: `token` (Azure AD) or `sas`. |
-| `sas_token` | `string` | no | `null` | SAS token for `auth_mode = "sas"`. Sensitive. |
-| `check_existance` | `bool` | no | `false` | When true, performs GET before PUT for brownfield import workflows. |
+| `account_name` | `string` | yes | — |  |
+| `container_name` | `string` | yes | — |  |
+| `blob_name` | `string` | yes | — |  |
+| `content` | `string` | no | `null` |  |
+| `content_type` | `string` | no | `"application/octet-stream"` |  |
+| `blob_type` | `string` | no | `"BlockBlob"` |  |
+| `metadata` | `map(string)` | no | `null` |  |
+| `access_tier` | `string` | no | `null` |  |
+| `auth_mode` | `string` | no | `"token"` |  |
+| `sas_token` | `string` | no | `null` |  |
+| `check_existance` | `bool` | no | `null` |  |
 
 #### YAML Example
 
 ```yaml
 azure_storage_account_blobs:
   app_config:
-    account_name: ref:azure_storage_accounts.app.account_name
-    container_name: "configs"
-    blob_name: "app/settings.json"
+    account_name: "mystorageaccount"
+    container_name: "app-configs"
+    blob_name: "production/config.json"
     content_type: "application/json"
-    content: '{"feature_flags": {"new_ui": true}}'
+    content: jsonencode({ environment = "production" })
     access_tier: "Hot"
+    metadata:
+      team: "platform"
+      environment: "production"
 ```
 
 ---
@@ -1825,6 +1839,12 @@ Map of blob containers to create inside storage accounts.
 | `account_name` | `string` | yes | — |  |
 | `container_name` | `string` | yes | — |  |
 | `public_access` | `string` | no | `"None"` |  |
+| `metadata` | `map(string)` | no | `null` |  |
+| `default_encryption_scope` | `string` | no | `null` |  |
+| `deny_encryption_scope_override` | `bool` | no | `null` |  |
+| `enable_nfs_v3_all_squash` | `bool` | no | `null` |  |
+| `enable_nfs_v3_root_squash` | `bool` | no | `null` |  |
+| `immutable_storage_with_versioning_enabled` | `bool` | no | `null` |  |
 | `_tenant` | `string` | no | `null` |  |
 
 #### YAML Example
@@ -1843,35 +1863,42 @@ azure_storage_account_containers:
 
 **API version:** `2025-08-01`
 
-Manages encryption scopes within a storage account, supporting both platform-managed and customer-managed keys.
+Map of storage account encryption scope instances to create. Each map key
+acts as the for_each identifier and must be unique within this configuration.
+
+Encryption scopes cannot be deleted — set state = "Disabled" to decommission.
 
 #### Attributes
 
 | Name | Type | Required | Default | Description |
 |------|------|:--------:|---------|-------------|
-| `subscription_id` | `string` | yes | — | The Azure subscription ID in which the storage account resides. |
-| `resource_group_name` | `string` | yes | — | The name of the resource group containing the storage account. |
-| `account_name` | `string` | yes | — | The name of the storage account in which to create the encryption scope. |
-| `encryption_scope_name` | `string` | yes | — | The name of the encryption scope (3–63 chars, alphanumeric and hyphens). |
-| `encryption_source` | `string` | yes | — | `Microsoft.Storage` for platform-managed keys or `Microsoft.KeyVault` for CMK. |
-| `key_vault_uri` | `string` | no | `null` | The URI of the Key Vault. Required when source is `Microsoft.KeyVault`. |
-| `key_vault_key_uri` | `string` | no | `null` | The full URI of the Key Vault key, optionally including the key version. |
-| `require_infrastructure_encryption` | `bool` | no | `null` | Apply a secondary layer of encryption at the infrastructure level. |
-| `state` | `string` | no | `"Enabled"` | State of the scope: `Enabled` or `Disabled`. |
-| `check_existance` | `bool` | no | `false` | When true, performs GET before PUT for brownfield import workflows. |
+| `subscription_id` | `string` | no | `null` |  |
+| `resource_group_name` | `string` | yes | — |  |
+| `account_name` | `string` | yes | — |  |
+| `encryption_scope_name` | `string` | yes | — |  |
+| `encryption_source` | `string` | yes | — |  |
+| `key_vault_uri` | `string` | no | `null` |  |
+| `key_vault_key_uri` | `string` | no | `null` |  |
+| `require_infrastructure_encryption` | `bool` | no | `null` |  |
+| `state` | `string` | no | `"Enabled"` |  |
+| `check_existance` | `bool` | no | `null` |  |
 
 #### YAML Example
 
 ```yaml
 azure_storage_account_encryption_scopes:
-  cmk_scope:
-    resource_group_name: ref:azure_resource_groups.app.resource_group_name
-    account_name: ref:azure_storage_accounts.app.account_name
-    encryption_scope_name: "cmk-scope-prod"
+  platform_key:
+    resource_group_name: "rg-storage"
+    account_name: "mystorageaccount"
+    encryption_scope_name: "platscope"
+    encryption_source: "Microsoft.Storage"
+  cmk:
+    resource_group_name: "rg-storage"
+    account_name: "mystorageaccount"
+    encryption_scope_name: "cmkscope"
     encryption_source: "Microsoft.KeyVault"
-    key_vault_uri: "https://kv-myapp-prod.vault.azure.net/"
-    key_vault_key_uri: "https://kv-myapp-prod.vault.azure.net/keys/storage-key"
-    state: "Enabled"
+    key_vault_key_uri: "https://myvault.vault.azure.net/keys/mykey/abc123"
+    require_infrastructure_encryption: true
 ```
 
 ---
@@ -1880,42 +1907,44 @@ azure_storage_account_encryption_scopes:
 
 **API version:** `2025-08-01`
 
-Manages the file service properties for a storage account (soft delete, CORS, SMB and NFS protocol settings).
+Map of file service configurations to apply to storage accounts. Each map key acts as
+the for_each identifier and must be unique within this configuration.
+
+Only one file service configuration exists per storage account (singleton pattern).
+The resource_group_name and account_name identify the parent storage account.
 
 #### Attributes
 
 | Name | Type | Required | Default | Description |
 |------|------|:--------:|---------|-------------|
-| `subscription_id` | `string` | yes | — | The Azure subscription ID that contains the storage account. |
-| `resource_group_name` | `string` | yes | — | The name of the resource group that contains the storage account. |
-| `account_name` | `string` | yes | — | The name of the storage account whose file service configuration to manage. |
-| `cors_rules` | `list(object)` | no | `null` | List of CORS rules for the file service. |
-| `share_delete_retention_policy` | `object` | no | `null` | Soft delete policy for file shares (enabled, days). |
-| `smb_versions` | `list(string)` | no | `null` | Allowed SMB protocol versions: `SMB2.1`, `SMB3.0`, `SMB3.1.1`. |
-| `smb_authentication_methods` | `list(string)` | no | `null` | Allowed SMB authentication methods: `NTLMv2`, `Kerberos`. |
-| `smb_kerberos_ticket_encryption` | `list(string)` | no | `null` | Kerberos ticket encryption types: `RC4-HMAC`, `AES-256`. |
-| `smb_channel_encryption` | `list(string)` | no | `null` | SMB channel encryption algorithms: `AES-128-CCM`, `AES-128-GCM`, `AES-256-GCM`. |
-| `smb_multichannel_enabled` | `bool` | no | `null` | Enable SMB Multichannel (Premium FileStorage accounts only). |
-| `nfs_v3_enabled` | `bool` | no | `null` | Enable NFS 3.0 protocol support. |
-| `nfs_v4_1_enabled` | `bool` | no | `null` | Enable NFS 4.1 protocol support. |
-| `check_existance` | `bool` | no | `false` | When true, performs GET before PUT for brownfield import workflows. |
+| `subscription_id` | `string` | no | `null` |  |
+| `resource_group_name` | `string` | yes | — |  |
+| `account_name` | `string` | yes | — |  |
+| `cors_rules` | `list(object)` | no | `null` |  |
+| `share_delete_retention_policy` | `object` | no | `null` |  |
+| `smb_versions` | `list(string)` | no | `null` |  |
+| `smb_authentication_methods` | `list(string)` | no | `null` |  |
+| `smb_kerberos_ticket_encryption` | `list(string)` | no | `null` |  |
+| `smb_channel_encryption` | `list(string)` | no | `null` |  |
+| `smb_multichannel_enabled` | `bool` | no | `null` |  |
+| `nfs_v3_enabled` | `bool` | no | `null` |  |
+| `nfs_v4_1_enabled` | `bool` | no | `null` |  |
+| `_tenant` | `string` | no | `null` |  |
+| `check_existance` | `bool` | no | `false` |  |
 
 #### YAML Example
 
 ```yaml
 azure_storage_account_file_services:
-  app:
-    resource_group_name: ref:azure_resource_groups.app.resource_group_name
-    account_name: ref:azure_storage_accounts.app.account_name
+  app_files:
+    resource_group_name: "rg-myapp"
+    account_name: "mystorageaccount"
     share_delete_retention_policy:
       enabled: true
-      days: 14
-    smb_versions:
-      - "SMB3.1.1"
-    smb_authentication_methods:
-      - "Kerberos"
-    smb_channel_encryption:
-      - "AES-256-GCM"
+      days: 7
+    smb_versions: ["SMB3.0", "SMB3.1.1"]
+    smb_authentication_methods: ["Kerberos"]
+    smb_channel_encryption: ["AES-128-GCM", "AES-256-GCM"]
 ```
 
 ---
@@ -1924,35 +1953,40 @@ azure_storage_account_file_services:
 
 **API version:** `2025-08-01`
 
-Manages file shares within a storage account.
+Map of file shares to create inside storage accounts.
 
 #### Attributes
 
 | Name | Type | Required | Default | Description |
 |------|------|:--------:|---------|-------------|
-| `subscription_id` | `string` | yes | — | The Azure subscription ID in which the storage account resides. |
-| `resource_group_name` | `string` | yes | — | The name of the resource group containing the storage account. |
-| `account_name` | `string` | yes | — | The name of the storage account. |
-| `share_name` | `string` | yes | — | The name of the file share (3–63 lowercase alphanumeric or hyphens). |
-| `share_quota` | `number` | yes | — | Provisioned size of the share in GiB (1–102400). |
-| `access_tier` | `string` | no | `null` | Access tier: `TransactionOptimized`, `Hot`, `Cool`, or `Premium`. |
-| `enabled_protocols` | `string` | no | `null` | Authentication protocol: `SMB` (default) or `NFS`. Immutable after creation. |
-| `root_squash` | `string` | no | `null` | Root squash for NFS shares: `NoRootSquash`, `RootSquash`, or `AllSquash`. |
-| `metadata` | `map(string)` | no | `null` | Custom metadata key-value pairs for the file share. |
-| `signed_identifiers` | `list(object)` | no | `null` | Stored access policies for the file share. |
-| `check_existance` | `bool` | no | `false` | When true, performs GET before PUT for brownfield import workflows. |
+| `subscription_id` | `string` | no | `null` |  |
+| `resource_group_name` | `string` | yes | — |  |
+| `account_name` | `string` | yes | — |  |
+| `share_name` | `string` | yes | — |  |
+| `share_quota` | `number` | yes | — |  |
+| `access_tier` | `string` | no | `null` |  |
+| `enabled_protocols` | `string` | no | `null` |  |
+| `root_squash` | `string` | no | `null` |  |
+| `metadata` | `map(string)` | no | `null` |  |
+| `signed_identifiers` | `list(object)` | no | `null` |  |
+| `_tenant` | `string` | no | `null` |  |
 
 #### YAML Example
 
 ```yaml
 azure_storage_account_file_shares:
-  app_share:
-    resource_group_name: ref:azure_resource_groups.app.resource_group_name
-    account_name: ref:azure_storage_accounts.app.account_name
-    share_name: "app-data"
+  data:
+    resource_group_name: "rg-myapp"
+    account_name: "stmyapp001"
+    share_name: "myshare"
     share_quota: 100
-    access_tier: "Hot"
-    enabled_protocols: "SMB"
+  nfs:
+    resource_group_name: "rg-myapp"
+    account_name: "stmyapp001"
+    share_name: "nfsshare"
+    share_quota: 1024
+    enabled_protocols: "NFS"
+    root_squash: "RootSquash"
 ```
 
 ---
@@ -1961,41 +1995,35 @@ azure_storage_account_file_shares:
 
 **API version:** `2025-08-01`
 
-Manages the blob inventory policy for a storage account, defining periodic inventory reports written to a destination container.
+Map of blob inventory policies to create on storage accounts.
+Each policy defines one or more inventory rules that periodically write
+inventory reports (CSV or Parquet) to a destination container.
 
 #### Attributes
 
 | Name | Type | Required | Default | Description |
 |------|------|:--------:|---------|-------------|
-| `subscription_id` | `string` | yes | — | The Azure subscription ID containing the storage account. |
-| `resource_group_name` | `string` | yes | — | The name of the resource group containing the storage account. |
-| `account_name` | `string` | yes | — | The name of the storage account for which to configure the inventory policy. |
-| `rules` | `list(object)` | yes | — | List of inventory policy rules (name, enabled, destination, schedule, object_type, format, schema_fields, and optional filters). |
-| `check_existance` | `bool` | no | `false` | When true, performs GET before PUT for brownfield import workflows. |
+| `subscription_id` | `string` | no | `null` |  |
+| `resource_group_name` | `string` | yes | — |  |
+| `account_name` | `string` | yes | — |  |
+| `rules` | `list(object)` | yes | — |  |
 
 #### YAML Example
 
 ```yaml
 azure_storage_account_inventory_policies:
-  app:
-    resource_group_name: ref:azure_resource_groups.app.resource_group_name
-    account_name: ref:azure_storage_accounts.app.account_name
-    rules:
-      - name: "daily-blob-inventory"
-        enabled: true
-        destination: "inventory-reports"
-        schedule: "Daily"
+  datalake_weekly:
+    resource_group_name: "rg-datalake"
+    account_name: "stdatalake001"
+    rules: [
+        name: "weekly-blob-inventory"
+        destination: "inventory-output"
+        schedule: "Weekly"
         object_type: "Blob"
         format: "Parquet"
-        schema_fields:
-          - "Name"
-          - "Creation-Time"
-          - "Last-Modified"
-          - "Content-Length"
-          - "BlobType"
-          - "AccessTier"
-        blob_types:
-          - "blockBlob"
+        schema_fields: ["Name", "Creation-Time", "Content-Length", "BlobType", "AccessTier"]
+        blob_types: ["blockBlob"]
+    ]:
 ```
 
 ---
@@ -2004,41 +2032,43 @@ azure_storage_account_inventory_policies:
 
 **API version:** `2025-08-01`
 
-Manages local users on a storage account for SFTP and NFS access.
+Map of Storage Account Local User instances to create. Each map key acts as the
+for_each identifier and must be unique within this configuration.
+Local users provide SFTP and NFSv3 identity for Azure Blob Storage and Azure Files.
+The parent storage account must have is_hns_enabled, is_sftp_enabled, and
+is_local_user_enabled set to true.
 
 #### Attributes
 
 | Name | Type | Required | Default | Description |
 |------|------|:--------:|---------|-------------|
-| `subscription_id` | `string` | yes | — | The Azure subscription ID in which the storage account resides. |
-| `resource_group_name` | `string` | yes | — | The name of the resource group containing the storage account. |
-| `account_name` | `string` | yes | — | The name of the storage account that hosts this local user. |
-| `username` | `string` | yes | — | The name of the local user (3–64 lowercase alphanumeric and hyphens). |
-| `permission_scopes` | `list(object)` | yes | — | Permission scopes granted to the user (service, resource_name, permissions string). |
-| `home_directory` | `string` | no | `null` | Optional home directory path within the storage account. |
-| `ssh_authorized_keys` | `list(object)` | no | `null` | List of SSH public keys authorized for SFTP authentication. |
-| `has_ssh_password` | `bool` | no | `null` | Indicates whether an SSH password exists. Set false to remove it. |
-| `allow_acl_authorization` | `bool` | no | `null` | Indicates whether ACL (POSIX) authorization is allowed for this user. |
-| `group_id` | `number` | no | `null` | Group identifier for NFSv3 local users. |
-| `extended_groups` | `list(number)` | no | `null` | Supplementary group membership for NFSv3 access. |
-| `check_existance` | `bool` | no | `false` | When true, performs GET before PUT for brownfield import workflows. |
+| `subscription_id` | `string` | yes | — |  |
+| `resource_group_name` | `string` | yes | — |  |
+| `account_name` | `string` | yes | — |  |
+| `username` | `string` | yes | — |  |
+| `permission_scopes` | `list(object)` | yes | — |  |
+| `home_directory` | `string` | no | `null` |  |
+| `ssh_authorized_keys` | `list(object)` | no | `null` |  |
+| `has_ssh_password` | `bool` | no | `null` |  |
+| `allow_acl_authorization` | `bool` | no | `null` |  |
+| `group_id` | `number` | no | `null` |  |
+| `extended_groups` | `list(number)` | no | `null` |  |
+| `check_existance` | `bool` | no | `false` |  |
 
 #### YAML Example
 
 ```yaml
 azure_storage_account_local_users:
-  sftp_user:
-    resource_group_name: ref:azure_resource_groups.app.resource_group_name
-    account_name: ref:azure_storage_accounts.app.account_name
-    username: "sftpuser01"
-    permission_scopes:
-      - service: "blob"
+  sftp_upload:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: "rg-data"
+    account_name: "mydatalake"
+    username: "sftp-upload"
+    permission_scopes: [
+        service: "blob"
         resource_name: "uploads"
         permissions: "rwdl"
-    home_directory: "uploads/sftpuser01"
-    ssh_authorized_keys:
-      - description: "My laptop key"
-        key: "ssh-rsa AAAA..."
+    ]:
 ```
 
 ---
@@ -2047,38 +2077,39 @@ azure_storage_account_local_users:
 
 **API version:** `2025-08-01`
 
-Manages the lifecycle management policy for a storage account, automating blob tiering and deletion.
+Map of storage account management policy instances to create. Each map key
+acts as the for_each identifier and must be unique within this configuration.
+Only one management policy (named "default") is allowed per storage account.
 
 #### Attributes
 
 | Name | Type | Required | Default | Description |
 |------|------|:--------:|---------|-------------|
-| `subscription_id` | `string` | yes | — | The Azure subscription ID in which the storage account resides. |
-| `resource_group_name` | `string` | yes | — | The name of the resource group containing the storage account. |
-| `account_name` | `string` | yes | — | The name of the storage account for which the management policy is created. |
-| `rules` | `list(object)` | yes | — | Lifecycle management rules (name, enabled, filters, actions). Only one policy named `default` is allowed per account. |
-| `check_existance` | `bool` | no | `false` | When true, performs GET before PUT for brownfield import workflows. |
+| `subscription_id` | `string` | no | `null` |  |
+| `resource_group_name` | `string` | yes | — |  |
+| `account_name` | `string` | yes | — |  |
+| `rules` | `list(object)` | yes | — |  |
+| `check_existance` | `bool` | no | `null` |  |
 
 #### YAML Example
 
 ```yaml
 azure_storage_account_management_policies:
-  app:
-    resource_group_name: ref:azure_resource_groups.app.resource_group_name
-    account_name: ref:azure_storage_accounts.app.account_name
-    rules:
-      - name: "archive-old-blobs"
+  datalake:
+    resource_group_name: "rg-data"
+    account_name: "mydatalake"
+    rules: [
+        name: "lifecycle-hot-to-cold"
         enabled: true
         filters:
-          blob_types:
-            - "blockBlob"
-          prefix_match:
-            - "data/cold/"
+          blob_types: ["blockBlob"]
+          prefix_match: ["raw/"]
         actions:
           base_blob:
             tier_to_cool_after_days_since_modification_greater_than: 30
             tier_to_archive_after_days_since_modification_greater_than: 180
-            delete_after_days_since_modification_greater_than: 365
+            delete_after_days_since_modification_greater_than: 1825
+    ]:
 ```
 
 ---
@@ -2087,35 +2118,34 @@ azure_storage_account_management_policies:
 
 **API version:** `2025-08-01`
 
-Manages object replication policies between source and destination storage accounts.
+Map of object replication policies to create on destination storage accounts.
 
 #### Attributes
 
 | Name | Type | Required | Default | Description |
 |------|------|:--------:|---------|-------------|
-| `subscription_id` | `string` | yes | — | The Azure subscription ID containing the destination storage account. |
-| `resource_group_name` | `string` | yes | — | The name of the resource group containing the destination storage account. |
-| `account_name` | `string` | yes | — | The name of the destination storage account for object replication. |
-| `source_account` | `string` | yes | — | The full ARM resource ID of the source storage account. |
-| `rules` | `list(object)` | yes | — | Replication rules mapping source containers to destination containers (source_container, destination_container, optional rule_id, min_creation_time, prefix_match). |
-| `policy_id` | `string` | no | `"default"` | The object replication policy ID. Use `default` when creating; Azure assigns the actual ID. |
-| `metrics_enabled` | `bool` | no | `null` | Enable object replication metrics for this policy. |
-| `priority_replication_enabled` | `bool` | no | `null` | Enable priority replication for this policy. |
-| `tags_replication_enabled` | `bool` | no | `null` | Enable blob tag replication as part of object replication. |
-| `check_existance` | `bool` | no | `false` | When true, performs GET before PUT for brownfield import workflows. |
+| `subscription_id` | `string` | no | `null` |  |
+| `resource_group_name` | `string` | yes | — |  |
+| `account_name` | `string` | yes | — |  |
+| `source_account` | `string` | yes | — |  |
+| `policy_id` | `string` | no | `"default"` |  |
+| `rules` | `list(object)` | yes | — |  |
+| `metrics_enabled` | `bool` | no | `null` |  |
+| `priority_replication_enabled` | `bool` | no | `null` |  |
+| `tags_replication_enabled` | `bool` | no | `null` |  |
 
 #### YAML Example
 
 ```yaml
 azure_storage_account_object_replication_policies:
   prod_to_dr:
-    resource_group_name: ref:azure_resource_groups.app.resource_group_name
-    account_name: ref:azure_storage_accounts.dr.account_name
-    source_account: ref:azure_storage_accounts.app.id
-    rules:
-      - source_container: "app-data"
-        destination_container: "app-data-replica"
-        min_creation_time: "2024-01-01T00:00:00Z"
+    resource_group_name: "rg-storage-dr"
+    account_name: "stdrstorage001"  # destination account
+    source_account: "/subscriptions/.../storageAccounts/stprod001"
+    rules: [
+        source_container: "data"
+        destination_container: "data-replica"
+    ]:
 ```
 
 ---
@@ -2124,29 +2154,32 @@ azure_storage_account_object_replication_policies:
 
 **API version:** `2025-08-01`
 
-Manages queues within a storage account.
+Map of queues to create inside storage accounts.
 
 #### Attributes
 
 | Name | Type | Required | Default | Description |
 |------|------|:--------:|---------|-------------|
-| `subscription_id` | `string` | yes | — | The Azure subscription ID in which the storage account resides. |
-| `resource_group_name` | `string` | yes | — | The name of the resource group containing the storage account. |
-| `account_name` | `string` | yes | — | The name of the storage account. |
-| `queue_name` | `string` | yes | — | The name of the queue (3–63 lowercase alphanumeric or hyphens). |
-| `metadata` | `map(string)` | no | `null` | Custom metadata key-value pairs for the queue. |
-| `check_existance` | `bool` | no | `false` | When true, performs GET before PUT for brownfield import workflows. |
+| `subscription_id` | `string` | no | `null` |  |
+| `resource_group_name` | `string` | yes | — |  |
+| `account_name` | `string` | yes | — |  |
+| `queue_name` | `string` | yes | — |  |
+| `metadata` | `map(string)` | no | `null` |  |
+| `_tenant` | `string` | no | `null` |  |
 
 #### YAML Example
 
 ```yaml
 azure_storage_account_queues:
-  job_queue:
-    resource_group_name: ref:azure_resource_groups.app.resource_group_name
-    account_name: ref:azure_storage_accounts.app.account_name
-    queue_name: "job-processing"
+  events:
+    resource_group_name: "rg-myapp"
+    account_name: "stmyapp001"
+    queue_name: "events-queue"
+  notifications:
+    resource_group_name: "rg-myapp"
+    account_name: "stmyapp001"
+    queue_name: "notifications"
     metadata:
-      team: "platform"
       environment: "production"
 ```
 
@@ -2156,31 +2189,26 @@ azure_storage_account_queues:
 
 **API version:** `2025-08-01`
 
-Manages tables within a storage account.
+Map of tables to create inside storage accounts.
 
 #### Attributes
 
 | Name | Type | Required | Default | Description |
 |------|------|:--------:|---------|-------------|
-| `subscription_id` | `string` | yes | — | The Azure subscription ID in which the storage account resides. |
-| `resource_group_name` | `string` | yes | — | The name of the resource group containing the storage account. |
-| `account_name` | `string` | yes | — | The name of the storage account. |
-| `table_name` | `string` | yes | — | The name of the table (3–63 alphanumeric characters, must begin with a letter). |
-| `signed_identifiers` | `list(object)` | no | `null` | Stored access policies for the table. Each entry requires a unique id. |
-| `check_existance` | `bool` | no | `false` | When true, performs GET before PUT for brownfield import workflows. |
+| `subscription_id` | `string` | no | `null` |  |
+| `resource_group_name` | `string` | yes | — |  |
+| `account_name` | `string` | yes | — |  |
+| `table_name` | `string` | yes | — |  |
+| `signed_identifiers` | `list(object)` | no | `null` |  |
 
 #### YAML Example
 
 ```yaml
 azure_storage_account_tables:
-  app_sessions:
-    resource_group_name: ref:azure_resource_groups.app.resource_group_name
-    account_name: ref:azure_storage_accounts.app.account_name
-    table_name: "AppSessions"
-  audit_log:
-    resource_group_name: ref:azure_resource_groups.app.resource_group_name
-    account_name: ref:azure_storage_accounts.app.account_name
-    table_name: "AuditLog"
+  products:
+    resource_group_name: "rg-myapp"
+    account_name: "stmyapp001"
+    table_name: "Products"
 ```
 
 ---
@@ -2222,6 +2250,16 @@ identifier and must be unique within this configuration.
 | `encryption_key_version` | `string` | no | `null` |  |
 | `encryption_identity` | `string` | no | `null` |  |
 | `encryption_require_infrastructure_encryption` | `bool` | no | `null` |  |
+| `large_file_shares_state` | `string` | no | `null` |  |
+| `routing_preference` | `object` | no | `null` |  |
+| `sas_policy` | `object` | no | `null` |  |
+| `key_expiration_period_in_days` | `number` | no | `null` |  |
+| `dns_endpoint_type` | `string` | no | `null` |  |
+| `is_sftp_enabled` | `bool` | no | `null` |  |
+| `is_local_user_enabled` | `bool` | no | `null` |  |
+| `is_nfs_v3_enabled` | `bool` | no | `null` |  |
+| `enable_extended_groups` | `bool` | no | `null` |  |
+| `immutable_storage_with_versioning_enabled` | `bool` | no | `null` |  |
 
 #### YAML Example
 
