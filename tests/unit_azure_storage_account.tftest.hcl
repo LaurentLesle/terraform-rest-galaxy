@@ -1,17 +1,29 @@
 # Unit test — modules/azure/storage_account
 # Plan-only: validates computed outputs that are known at plan time (id, name, location, kind, sku_name).
 # Does NOT test API-sourced outputs (provisioning_state, endpoints) as those are only known after apply.
-# NOTE: This module has a provider_check data source for Microsoft.Storage and a
-# check_name_availability operation, so plan will fail with a placeholder token.
-# The test is kept for structure completeness — run with real credentials to validate assertions.
-# Run: TF_VAR_access_token=$(az account get-access-token ...) terraform test -filter=tests/unit_azure_storage_account.tftest.hcl
+# NOTE: This module has a provider_check data source for Microsoft.Storage that reads ARM at plan time.
+# Real Azure credentials (TF_VAR_access_token + TF_VAR_subscription_id) are required.
+# Run: TF_VAR_access_token=$(az account get-access-token --resource https://management.azure.com --query accessToken -o tsv) \
+#      TF_VAR_subscription_id=$(az account show --query id -o tsv) \
+#      terraform test -filter=tests/unit_azure_storage_account.tftest.hcl
+
+variable "access_token" {
+  type      = string
+  sensitive = true
+  default   = "placeholder"
+}
+
+variable "subscription_id" {
+  type    = string
+  default = "00000000-0000-0000-0000-000000000000"
+}
 
 provider "rest" {
   base_url = "https://management.azure.com"
   security = {
     http = {
       token = {
-        token = "placeholder-for-unit-tests"
+        token = var.access_token
       }
     }
   }
@@ -27,7 +39,7 @@ run "plan_minimum" {
   }
 
   variables {
-    subscription_id     = "00000000-0000-0000-0000-000000000000"
+    subscription_id     = var.subscription_id
     resource_group_name = "rg-unit-test"
     account_name        = "stunitmin001"
     sku_name            = "Standard_LRS"
@@ -56,7 +68,7 @@ run "plan_minimum" {
   }
 
   assert {
-    condition     = output.id == "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-unit-test/providers/Microsoft.Storage/storageAccounts/stunitmin001"
+    condition     = output.id == "/subscriptions/${var.subscription_id}/resourceGroups/rg-unit-test/providers/Microsoft.Storage/storageAccounts/stunitmin001"
     error_message = "id output must be the fully-qualified ARM resource ID."
   }
 
@@ -76,7 +88,7 @@ run "plan_adls_nfs" {
   }
 
   variables {
-    subscription_id        = "00000000-0000-0000-0000-000000000000"
+    subscription_id        = var.subscription_id
     resource_group_name    = "rg-unit-test"
     account_name           = "stunitnfs001"
     sku_name               = "Standard_LRS"
@@ -105,7 +117,7 @@ run "plan_system_identity" {
   }
 
   variables {
-    subscription_id     = "00000000-0000-0000-0000-000000000000"
+    subscription_id     = var.subscription_id
     resource_group_name = "rg-unit-test"
     account_name        = "stunitid001"
     sku_name            = "Standard_LRS"
@@ -130,7 +142,7 @@ run "plan_network_acls" {
   }
 
   variables {
-    subscription_id       = "00000000-0000-0000-0000-000000000000"
+    subscription_id       = var.subscription_id
     resource_group_name   = "rg-unit-test"
     account_name          = "stunitnet001"
     sku_name              = "Standard_LRS"
@@ -161,7 +173,7 @@ run "plan_sas_and_key_policy" {
   }
 
   variables {
-    subscription_id     = "00000000-0000-0000-0000-000000000000"
+    subscription_id     = var.subscription_id
     resource_group_name = "rg-unit-test"
     account_name        = "stunitpol001"
     sku_name            = "Standard_LRS"
@@ -190,7 +202,7 @@ run "plan_large_file_shares" {
   }
 
   variables {
-    subscription_id         = "00000000-0000-0000-0000-000000000000"
+    subscription_id         = var.subscription_id
     resource_group_name     = "rg-unit-test"
     account_name            = "stunitlfs001"
     sku_name                = "Standard_LRS"
@@ -215,7 +227,7 @@ run "plan_routing_preference" {
   }
 
   variables {
-    subscription_id     = "00000000-0000-0000-0000-000000000000"
+    subscription_id     = var.subscription_id
     resource_group_name = "rg-unit-test"
     account_name        = "stunitrout001"
     sku_name            = "Standard_LRS"

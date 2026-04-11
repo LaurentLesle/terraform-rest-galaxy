@@ -1,5 +1,9 @@
 # Storage platform — comprehensive RBAC from Entra ID groups
 #
+# ci:skip
+# (externals.azure_role_definitions only exposes role_name, not id — requires
+#  a real subscription with role definitions that return the id field)
+#
 # This configuration demonstrates fine-grained Azure RBAC across every storage
 # resource type that supports role-based access control.
 #
