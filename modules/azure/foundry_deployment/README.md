@@ -1,194 +1,79 @@
-# Azure AI Foundry Deployment Module
+<!-- BEGIN_TF_DOCS -->
 
-Manages a model deployment on an Azure AI Foundry account (`Microsoft.CognitiveServices/accounts/deployments`).
 
-> **Hero module:** Full schema coverage with plan-time model availability validation, typed SKU validation, and complete documentation.
+## Requirements
 
-## Overview
+## Requirements
 
-A Foundry deployment provisions a specific AI model for inference under a Foundry account. Each deployment:
-- Targets a specific model (e.g. `gpt-4o`, `text-embedding-3-large`)
-- Allocates capacity (TPM for Standard, PTU for Provisioned)
-- Controls version upgrade behaviour
-- Optionally applies a Responsible AI content filtering policy
+| Name | Version |
+| ---- | ------- |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.5.0 |
+| <a name="requirement_rest"></a> [rest](#requirement\_rest) | = 1.2.0 |
 
-**Plan-time model availability check** — a `data "rest_resource"` source queries
-`GET .../providers/Microsoft.CognitiveServices/locations/{location}/models` before
-the deployment is created. If the model is not available in the target region,
-`terraform plan` fails immediately with a CLI command to list available models.
+## Providers
 
-## API Version
+## Providers
 
-`2025-09-01` — **stable GA**.
+| Name | Version |
+| ---- | ------- |
+| <a name="provider_rest"></a> [rest](#provider\_rest) | = 1.2.0 |
 
-## SKU Reference
+## Resources
 
-| SKU name | Billing | Use case |
-|---|---|---|
-| `GlobalStandard` | Pay-per-token, global routing | Production — recommended default |
-| `Standard` | Pay-per-token, regional | Data-residency requirements |
-| `DataZoneStandard` | Pay-per-token, data-zone routing | Data-zone compliance |
-| `ProvisionedManaged` | Reserved PTU, regional | Predictable latency, high throughput |
-| `DataZoneProvisionedManaged` | Reserved PTU, data-zone | Provisioned + data-zone |
-| `OnDemand` | On-demand capacity | Burst workloads |
+## Resources
 
-## Version Upgrade Options
-
-| Option | Behaviour |
-|---|---|
-| `OnceNewDefaultVersionAvailable` | Auto-upgrades when a new default is released (default) |
-| `OnceCurrentVersionExpired` | Stays pinned until EOL, then upgrades |
-| `NoAutoUpgrade` | Never auto-upgrades — manual version management required |
+| Name | Type |
+| ---- | ---- |
+| [rest_resource.foundry_deployment](https://registry.terraform.io/providers/LaurentLesle/rest/1.2.0/docs/resources/resource) | resource |
+| [rest_resource.available_models](https://registry.terraform.io/providers/LaurentLesle/rest/1.2.0/docs/data-sources/resource) | data source |
 
 ## Inputs
 
-| Name | Type | Required | Default | Description |
-|---|---|---|---|---|
-| `subscription_id` | string | yes | — | Azure subscription ID |
-| `resource_group_name` | string | yes | — | Resource group of the parent account |
-| `account_name` | string | yes | — | Parent Foundry account name |
-| `location` | string | yes | — | Azure region (used for model availability check) |
-| `deployment_name` | string | yes | — | Name of the deployment (endpoint identifier) |
-| `model_format` | string | yes | — | Model format/provider (e.g. `OpenAI`) |
-| `model_name` | string | yes | — | Model name (e.g. `gpt-4o`) |
-| `sku_name` | string | yes | — | Deployment SKU (see SKU Reference above) |
-| `model_version` | string | no | null | Pinned model version (null = Microsoft default) |
-| `model_publisher` | string | no | null | Model publisher (for catalog models) |
-| `model_source` | string | no | null | Custom model source URI |
-| `model_source_account` | string | no | null | Source account for cross-account deployment |
-| `sku_capacity` | number | no | null | Capacity in TPM (Standard) or PTU (Provisioned) |
-| `version_upgrade_option` | string | no | `OnceNewDefaultVersionAvailable` | Auto-upgrade behaviour |
-| `rai_policy_name` | string | no | null | Content filtering policy name |
-| `scale_type` | string | no | null | Scale type: `Standard` or `Manual` |
-| `scale_capacity` | number | no | null | Scale capacity (used with scale_type) |
-| `capacity_settings_designated_capacity` | number | no | null | Reserved capacity for multi-deployment sharing |
-| `capacity_settings_priority` | number | no | null | Priority for capacity allocation |
-| `parent_deployment_name` | string | no | null | Parent deployment for hierarchical config |
-| `spillover_deployment_name` | string | no | null | Fallback deployment for overflow traffic |
-| `tags` | map(string) | no | null | Resource tags |
-| `check_existance` | bool | no | false | Import existing deployment if found |
+## Inputs
+
+| Name | Description | Type | Default | Required |
+| ---- | ----------- | ---- | ------- | :------: |
+| <a name="input_account_name"></a> [account\_name](#input\_account\_name) | The name of the parent Foundry account (Microsoft.CognitiveServices/accounts). | `string` | n/a | yes |
+| <a name="input_capacity_settings_designated_capacity"></a> [capacity\_settings\_designated\_capacity](#input\_capacity\_settings\_designated\_capacity) | The designated (reserved) capacity for this deployment. Used in multi-deployment capacity management scenarios. | `number` | `null` | no |
+| <a name="input_capacity_settings_priority"></a> [capacity\_settings\_priority](#input\_capacity\_settings\_priority) | The priority for capacity allocation when multiple deployments share capacity. Lower values = higher priority. | `number` | `null` | no |
+| <a name="input_check_existance"></a> [check\_existance](#input\_check\_existance) | Check whether the resource already exists before creating it. When true, the provider performs a GET before PUT and imports the resource into state if it exists. Set to true for brownfield import workflows. | `bool` | `false` | no |
+| <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | The name of this model deployment. Must be unique within the Foundry account. Used as the deployment endpoint identifier in API calls. | `string` | n/a | yes |
+| <a name="input_location"></a> [location](#input\_location) | The Azure region of the parent Foundry account. Used to validate model availability at plan time. | `string` | n/a | yes |
+| <a name="input_model_format"></a> [model\_format](#input\_model\_format) | The format/provider of the model. Determines which model catalog is used.<br/><br/>Common values:<br/>- "OpenAI"         — Azure OpenAI models (gpt-4o, gpt-4, text-embedding-ada-002, etc.)<br/>- "Meta"           — Meta Llama models (via Azure AI model catalog)<br/>- "Mistral"        — Mistral models<br/>- "Microsoft"      — Microsoft Phi models<br/>- "Cohere"         — Cohere models<br/><br/>The available formats depend on your region and subscription. | `string` | n/a | yes |
+| <a name="input_model_name"></a> [model\_name](#input\_model\_name) | The name of the model to deploy. Must match an available model in your region.<br/><br/>Common OpenAI models:<br/>- "gpt-4o"                — GPT-4o (recommended for most use cases)<br/>- "gpt-4o-mini"           — GPT-4o Mini (cost-optimised)<br/>- "gpt-4"                 — GPT-4<br/>- "gpt-35-turbo"          — GPT-3.5 Turbo<br/>- "text-embedding-ada-002" — Ada v2 embeddings<br/>- "text-embedding-3-small" — Ada 3 Small embeddings<br/>- "text-embedding-3-large" — Ada 3 Large embeddings<br/>- "dall-e-3"              — DALL-E 3 image generation<br/>- "whisper"               — Whisper speech-to-text<br/>- "tts"                   — Text-to-speech<br/>- "tts-hd"                — Text-to-speech HD<br/><br/>A plan-time precondition validates that the model is available in var.location. | `string` | n/a | yes |
+| <a name="input_model_publisher"></a> [model\_publisher](#input\_model\_publisher) | The model publisher. Typically not needed for OpenAI models but required for some third-party catalog models. | `string` | `null` | no |
+| <a name="input_model_source"></a> [model\_source](#input\_model\_source) | The model source URI. Used for fine-tuned or custom models deployed from a specific registry path. | `string` | `null` | no |
+| <a name="input_model_source_account"></a> [model\_source\_account](#input\_model\_source\_account) | The source account resource ID for models being cross-account deployed. | `string` | `null` | no |
+| <a name="input_model_version"></a> [model\_version](#input\_model\_version) | The specific model version to deploy (e.g. "2024-08-06" for gpt-4o).<br/>Leave null to use the current default version. Pin a version for<br/>reproducible behaviour — unpinned deployments may change on Microsoft's<br/>release schedule according to version\_upgrade\_option. | `string` | `null` | no |
+| <a name="input_parent_deployment_name"></a> [parent\_deployment\_name](#input\_parent\_deployment\_name) | The name of the parent deployment. Used for hierarchical deployment configurations. | `string` | `null` | no |
+| <a name="input_rai_policy_name"></a> [rai\_policy\_name](#input\_rai\_policy\_name) | The name of the Responsible AI (RAI) content filtering policy to apply to this deployment.<br/>Leave null to use the account default policy. Custom policies can be created in<br/>Azure AI Foundry Studio under Content Filters. | `string` | `null` | no |
+| <a name="input_resource_group_name"></a> [resource\_group\_name](#input\_resource\_group\_name) | The resource group containing the parent Foundry account. | `string` | n/a | yes |
+| <a name="input_scale_capacity"></a> [scale\_capacity](#input\_scale\_capacity) | The capacity for scaleSettings. Typically set together with scale\_type. | `number` | `null` | no |
+| <a name="input_scale_type"></a> [scale\_type](#input\_scale\_type) | The scale type for scaleSettings: 'Standard' or 'Manual'. Typically managed automatically — only set if instructed by Azure support. | `string` | `null` | no |
+| <a name="input_sku_capacity"></a> [sku\_capacity](#input\_sku\_capacity) | Capacity in thousands of tokens per minute (TPM) for Standard/GlobalStandard SKUs,<br/>or in Provisioned Throughput Units (PTU) for ProvisionedManaged SKUs.<br/><br/>Examples:<br/>- 10  → 10K TPM (Standard/GlobalStandard)<br/>- 100 → 100K TPM (GlobalStandard)<br/>- 300 → 300 PTU (ProvisionedManaged)<br/><br/>Leave null for some SKUs that manage capacity automatically (e.g. OnDemand). | `number` | `null` | no |
+| <a name="input_sku_name"></a> [sku\_name](#input\_sku\_name) | The deployment SKU. Determines throughput, billing model, and availability.<br/><br/>- "Standard"                    — Pay-per-token, regional capacity<br/>- "GlobalStandard"              — Pay-per-token, global load-balanced capacity (recommended)<br/>- "DataZoneStandard"            — Pay-per-token, data-zone routing<br/>- "ProvisionedManaged"          — Reserved throughput (PTU) — requires quota approval<br/>- "DataZoneProvisionedManaged"  — Reserved throughput, data-zone routing<br/>- "OnDemand"                    — On-demand capacity (where available)<br/><br/>Use "GlobalStandard" for most production deployments unless data residency<br/>requirements mandate a regional or data-zone SKU. | `string` | n/a | yes |
+| <a name="input_spillover_deployment_name"></a> [spillover\_deployment\_name](#input\_spillover\_deployment\_name) | The name of the fallback deployment to handle overflow traffic when this deployment reaches capacity. | `string` | `null` | no |
+| <a name="input_subscription_id"></a> [subscription\_id](#input\_subscription\_id) | The Azure subscription ID. | `string` | n/a | yes |
+| <a name="input_tags"></a> [tags](#input\_tags) | Tags to apply to the deployment resource. | `map(string)` | `null` | no |
+| <a name="input_version_upgrade_option"></a> [version\_upgrade\_option](#input\_version\_upgrade\_option) | Controls automatic version upgrades for the deployed model:<br/><br/>- "OnceNewDefaultVersionAvailable" (default): Automatically upgrades to the new<br/>  default version when Microsoft releases one. Minimal maintenance, but behaviour<br/>  may change.<br/>- "OnceCurrentVersionExpired": Stays on the pinned version until it reaches<br/>  end-of-life, then upgrades. Balance between stability and maintenance.<br/>- "NoAutoUpgrade": Never automatically upgrades. Requires manual version<br/>  management. Use when strict version pinning is required for compliance. | `string` | `"OnceNewDefaultVersionAvailable"` | no |
 
 ## Outputs
 
-| Name | Plan-time | Description |
-|---|---|---|
-| `id` | yes | Full ARM resource ID |
-| `deployment_name` | yes | Deployment name (echoes input) |
-| `account_name` | yes | Parent account name (echoes input) |
-| `resource_group_name` | yes | Resource group name (echoes input) |
-| `location` | yes | Azure region (echoes input) |
-| `model_name` | yes | Deployed model name (echoes input) |
-| `model_format` | yes | Model format (echoes input) |
-| `sku_name` | yes | SKU name (echoes input) |
-| `provisioning_state` | after apply | Provisioning state (Succeeded, etc.) |
-| `model_version_deployed` | after apply | Actual deployed version (may differ if version was null) |
-| `version_upgrade_option` | after apply | Version upgrade option as confirmed by Azure |
-| `sku_capacity_deployed` | after apply | Actual capacity allocated by Azure |
+## Outputs
 
-## Examples
-
-### Minimum — GPT-4o GlobalStandard
-
-```yaml
-azure_foundry_deployments:
-  gpt4o:
-    resource_group_name: ref:azure_resource_groups.foundry.resource_group_name
-    location: ref:azure_resource_groups.foundry.location
-    account_name: ref:azure_foundry_accounts.main.account_name
-    deployment_name: gpt-4o
-    model_format: OpenAI
-    model_name: gpt-4o
-    sku_name: GlobalStandard
-    sku_capacity: 100
-```
-
-### Pinned version with spillover
-
-```yaml
-azure_foundry_deployments:
-  gpt4o_primary:
-    resource_group_name: ref:azure_resource_groups.foundry.resource_group_name
-    location: ref:azure_resource_groups.foundry.location
-    account_name: ref:azure_foundry_accounts.main.account_name
-    deployment_name: gpt-4o-primary
-    model_format: OpenAI
-    model_name: gpt-4o
-    model_version: "2024-08-06"
-    sku_name: GlobalStandard
-    sku_capacity: 200
-    version_upgrade_option: NoAutoUpgrade
-    spillover_deployment_name: gpt-4o-fallback
-
-  gpt4o_fallback:
-    resource_group_name: ref:azure_resource_groups.foundry.resource_group_name
-    location: ref:azure_resource_groups.foundry.location
-    account_name: ref:azure_foundry_accounts.main.account_name
-    deployment_name: gpt-4o-fallback
-    model_format: OpenAI
-    model_name: gpt-4o
-    sku_name: Standard
-    sku_capacity: 50
-    version_upgrade_option: NoAutoUpgrade
-```
-
-### Embeddings
-
-```yaml
-azure_foundry_deployments:
-  embeddings:
-    resource_group_name: ref:azure_resource_groups.foundry.resource_group_name
-    location: ref:azure_resource_groups.foundry.location
-    account_name: ref:azure_foundry_accounts.main.account_name
-    deployment_name: text-embedding-3-large
-    model_format: OpenAI
-    model_name: text-embedding-3-large
-    sku_name: Standard
-    sku_capacity: 50
-    version_upgrade_option: NoAutoUpgrade
-```
-
-### Provisioned Managed (PTU)
-
-```yaml
-azure_foundry_deployments:
-  gpt4o_ptu:
-    resource_group_name: ref:azure_resource_groups.foundry.resource_group_name
-    location: ref:azure_resource_groups.foundry.location
-    account_name: ref:azure_foundry_accounts.main.account_name
-    deployment_name: gpt-4o-ptu
-    model_format: OpenAI
-    model_name: gpt-4o
-    model_version: "2024-08-06"
-    sku_name: ProvisionedManaged
-    sku_capacity: 300
-    version_upgrade_option: NoAutoUpgrade
-```
-
-## Model Availability
-
-List models available in a region:
-
-```bash
-az rest --method GET \
-  --url "https://management.azure.com/subscriptions/{subscriptionId}/providers/Microsoft.CognitiveServices/locations/francecentral/models?api-version=2025-06-01" \
-  --query "value[].{name:model.name,format:model.format,version:model.version}" \
-  -o table
-```
-
-## Dependency Chain
-
-```
-Layer 0: azure_resource_groups
-Layer 2: azure_foundry_accounts (depends on resource_groups)
-Layer 4: azure_foundry_deployments (depends on foundry_accounts)
-```
-
-Always wire `account_name` via a `ref:azure_foundry_accounts.<key>.account_name` to
-ensure Terraform applies the account before the deployment.
-
-## See Also
-
-- [foundry_account module](../foundry_account/README.md) — parent account
-- [foundry_managed_network module](../foundry_managed_network/README.md) — managed VNet
-- [Azure AI Foundry deployments REST API](https://learn.microsoft.com/en-us/rest/api/cognitiveservices/accountmanagement/deployments/create-or-update)
-- [Model list REST API](https://learn.microsoft.com/en-us/rest/api/aifoundry/accountmanagement/models/list)
+| Name | Description |
+| ---- | ----------- |
+| <a name="output_account_name"></a> [account\_name](#output\_account\_name) | The parent Foundry account name (plan-time, echoes input). |
+| <a name="output_api_version"></a> [api\_version](#output\_api\_version) | The ARM API version used to manage this resource. |
+| <a name="output_deployment_name"></a> [deployment\_name](#output\_deployment\_name) | The name of the deployment (plan-time, echoes input). |
+| <a name="output_id"></a> [id](#output\_id) | The full ARM resource ID of the deployment (plan-time). |
+| <a name="output_location"></a> [location](#output\_location) | The Azure region (plan-time, echoes input). |
+| <a name="output_model_format"></a> [model\_format](#output\_model\_format) | The deployed model format (plan-time, echoes input). |
+| <a name="output_model_name"></a> [model\_name](#output\_model\_name) | The deployed model name (plan-time, echoes input). |
+| <a name="output_model_version_deployed"></a> [model\_version\_deployed](#output\_model\_version\_deployed) | The actual model version deployed (may differ from input if version was null — Azure selects the default). |
+| <a name="output_provisioning_state"></a> [provisioning\_state](#output\_provisioning\_state) | The provisioning state of the deployment (e.g. Succeeded). |
+| <a name="output_resource_group_name"></a> [resource\_group\_name](#output\_resource\_group\_name) | The resource group name (plan-time, echoes input). |
+| <a name="output_sku_capacity_deployed"></a> [sku\_capacity\_deployed](#output\_sku\_capacity\_deployed) | The actual capacity allocated by Azure after apply. |
+| <a name="output_sku_name"></a> [sku\_name](#output\_sku\_name) | The deployment SKU name (plan-time, echoes input). |
+| <a name="output_version_upgrade_option"></a> [version\_upgrade\_option](#output\_version\_upgrade\_option) | The version upgrade option as confirmed by Azure after apply. |
+<!-- END_TF_DOCS -->

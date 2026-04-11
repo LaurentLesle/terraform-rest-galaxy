@@ -1,43 +1,46 @@
-# Entra ID Group Member Module
+<!-- BEGIN_TF_DOCS -->
 
-Manages a group membership in Entra ID (Azure AD) via the Microsoft Graph v1.0 API.
 
-Adds a directory object (user, group, or service principal) as a member of a group.
+## Requirements
 
-## Provider
+## Requirements
 
-Requires the `rest` provider configured with `base_url = "https://graph.microsoft.com"` and a token scoped to `https://graph.microsoft.com/.default`.
+| Name | Version |
+| ---- | ------- |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.5.0 |
+| <a name="requirement_rest"></a> [rest](#requirement\_rest) | = 1.2.0 |
 
-## API Reference
+## Providers
 
-- [Add member](https://learn.microsoft.com/en-us/graph/api/group-post-members)
-- [Remove member](https://learn.microsoft.com/en-us/graph/api/group-delete-members)
+## Providers
 
-## Usage
+| Name | Version |
+| ---- | ------- |
+| <a name="provider_rest"></a> [rest](#provider\_rest) | = 1.2.0 |
 
-```hcl
-module "group_member" {
-  source = "./modules/entraid/group_member"
+## Resources
 
-  providers = {
-    rest = rest.graph
-  }
+## Resources
 
-  group_id  = module.group.id
-  member_id = module.user.id
-}
-```
+| Name | Type |
+| ---- | ---- |
+| [rest_resource.group_member](https://registry.terraform.io/providers/LaurentLesle/rest/1.2.0/docs/resources/resource) | resource |
 
 ## Inputs
 
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `group_id` | `string` | yes | Object ID of the group |
-| `member_id` | `string` | yes | Object ID of the member to add |
+## Inputs
+
+| Name | Description | Type | Default | Required |
+| ---- | ----------- | ---- | ------- | :------: |
+| <a name="input_group_id"></a> [group\_id](#input\_group\_id) | The object ID of the group to add the member to. | `string` | n/a | yes |
+| <a name="input_member_id"></a> [member\_id](#input\_member\_id) | The object ID of the directory object (user, group, service principal) to add as a member. | `string` | n/a | yes |
+
+## Outputs
 
 ## Outputs
 
 | Name | Description |
-|------|-------------|
-| `group_id` | Object ID of the group (plan-time) |
-| `member_id` | Object ID of the member (plan-time) |
+| ---- | ----------- |
+| <a name="output_group_id"></a> [group\_id](#output\_group\_id) | The object ID of the group (plan-time, echoes input). |
+| <a name="output_member_id"></a> [member\_id](#output\_member\_id) | The object ID of the member (plan-time, echoes input). |
+<!-- END_TF_DOCS -->
