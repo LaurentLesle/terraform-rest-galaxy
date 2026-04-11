@@ -1,0 +1,145 @@
+# Configuration files
+
+Each `.yaml` file in this directory is a self-contained deployment scenario.
+Pass it to the root module with `TF_VAR_config_file=configurations/<name>.yaml`.
+
+## Quick-start template
+
+Copy the block below as the header of every new configuration file.
+Replace each `TODO` before committing.
+
+```yaml
+# <One-line description>
+#
+# <Optional longer explanation of what this config deploys and why.>
+#
+# Prerequisites:
+#   export TF_VAR_access_token=$(az account get-access-token \
+#     --resource https://management.azure.com --query accessToken -o tsv)
+#   export TF_VAR_subscription_id=$(az account show --query id -o tsv)
+#   TF_VAR_config_file=configurations/<name>.yaml terraform apply
+
+# ── State backend ─────────────────────────────────────────────────────────────
+terraform_backend:
+  type: local
+  path: <name>.tfstate        # TODO: must be unique across all configs
+```
+
+---
+
+## CI rules — what determines whether a config is plan-tested automatically
+
+The CI matrix job (`plan-config`) discovers configurations via:
+
+```bash
+grep -rL "^externals:" configurations/*.yaml
+```
+
+That single command encodes two conventions:
+
+### Rule 1 — no top-level `externals:` block → plan-safe
+
+Configs **without** a top-level `externals:` block are planned in CI with a
+placeholder token on every PR.  All 28 such configs appear as individual named
+checks in the GitHub Actions UI.
+
+### Rule 2 — top-level `externals:` block → live-token required
+
+Configs **with** a top-level `externals:` block are skipped by the plan-only
+matrix.  They are validated in the `apply-tests` job on push to `main`, which
+uses a real Azure OIDC token.
+
+Add `externals:` if your config calls live ARM/Graph APIs at plan time, e.g.:
+
+```yaml
+externals:
+  azure_role_definitions:
+    storage_blob_contributor:
+      role_name: "Storage Blob Data Contributor"
+  caller_context: {}          # also triggers exclusion
+```
+
+> **Why?**  `externals` entries are resolved by live REST calls during `plan`.
+> With a placeholder token these calls return 401/403 and the plan fails.
+
+---
+
+## Rule 3 — `subscription_id` must not be null at plan time
+
+Every config that deploys Azure resources (anything under
+`azure_resource_groups`, `azure_storage_accounts`, etc.) needs a non-null
+`subscription_id`.  You can provide it two ways:
+
+**Option A — embed it directly in the YAML** (recommended for demo configs):
+
+```yaml
+azure_resource_groups:
+  mygroup:
+    subscription_id: "00000000-0000-0000-0000-000000000000"   # demo
+    resource_group_name: rg-demo
+    location: westeurope
+```
+
+**Option B — rely on `TF_VAR_subscription_id`** (recommended for real environments):
+
+```yaml
+azure_resource_groups:
+  mygroup:
+    resource_group_name: rg-demo
+    location: westeurope
+    # subscription_id comes from TF_VAR_subscription_id
+```
+
+CI sets `TF_VAR_subscription_id=00000000-0000-0000-0000-000000000000` in all
+plan-only jobs.  For apply jobs (push to main) it uses the real subscription
+from `secrets.AZURE_SUBSCRIPTION_ID`.
+
+Leaving `subscription_id` completely absent **and** omitting `TF_VAR_subscription_id`
+causes `resource_group/main.tf` to fail with:
+
+```
+Error: Invalid template interpolation value
+  var.subscription_id is null
+```
+
+---
+
+## Rule 4 — `terraform_backend.path` must be unique
+
+Every config must have a `terraform_backend` block.  The `path` value is the
+local state file name — it must be unique across all configs or concurrent
+plans will corrupt each other's state.
+
+```yaml
+terraform_backend:
+  type: local
+  path: my_new_config.tfstate   # ← must not match any other config's path
+```
+
+---
+
+## Integration test pairing
+
+If you write a `tests/integration_config_<name>.tftest.hcl` for this config,
+the CI discovery logic derives the config name by stripping the
+`integration_config_` prefix:
+
+```
+tests/integration_config_storage_account_sftp.tftest.hcl
+                          └─────────────────────┘
+                          maps to configurations/storage_account_sftp.yaml
+```
+
+The test is automatically included in plan-only CI if and only if the
+corresponding YAML has no `externals:` block.  No workflow edits needed.
+
+---
+
+## Summary checklist for new configs
+
+- [ ] Header comment with description and `Prerequisites:` section
+- [ ] `terraform_backend` block with a unique `path`
+- [ ] `subscription_id` present (inline or via env var) for any Azure resource
+- [ ] If using `externals:` — aware that plan-only CI will skip this config
+- [ ] State file path does not collide with an existing config
+- [ ] Tested locally with `TF_VAR_config_file=configurations/<name>.yaml terraform plan`
