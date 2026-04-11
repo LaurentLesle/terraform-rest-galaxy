@@ -36,7 +36,7 @@ grep -rL "^externals:" configurations/*.yaml \
   | xargs grep -rL "^# ci:requires-live-token"
 ```
 
-That pipeline encodes three conventions:
+That pipeline encodes four conventions:
 
 ### Rule 1 — no top-level `externals:` block → plan-safe
 
@@ -85,6 +85,29 @@ placeholder token those calls return 401/403 and the plan fails.
 
 > **Rule of thumb:** if running `TF_VAR_access_token=placeholder terraform plan`
 > locally produces a 401/403 error for any reason, add `# ci:requires-live-token`.
+
+### Rule 2c — `# ci:skip` comment → excluded from all CI matrices
+
+Some configs require infrastructure or credentials that are simply not available
+in the CI environment (specific billing accounts, local `kind` clusters, Docker,
+partnership-only Azure resource providers, etc.).  Add `# ci:skip` to exclude
+a config from **both** the plan-safe and live-token matrices.
+
+```yaml
+# <description>
+#
+# ci:skip
+# (<short reason why CI cannot run this config>)
+```
+
+Configs with `# ci:skip` are never run in CI — they are validated only manually.
+This is a last resort: prefer fixing the environment issue or adding the necessary
+resource provider registration to `ci_test_providers.yaml` when possible.
+
+> **Examples of valid `ci:skip` reasons:**
+> - Cross-tenant billing configs requiring a specific billing account
+> - Configs using `externals:` that reference resources only in a private subscription
+> - Configs requiring local Docker/kind that cannot run on GitHub-hosted runners
 
 ---
 
@@ -165,5 +188,6 @@ corresponding YAML has no `externals:` block.  No workflow edits needed.
 - [ ] `terraform_backend` block with a unique `path`
 - [ ] `subscription_id` present (inline or via env var) for any Azure resource
 - [ ] If using `externals:` — aware that plan-only CI will skip this config
+- [ ] If CI cannot run this config at all — add `# ci:skip` with a reason
 - [ ] State file path does not collide with an existing config
 - [ ] Tested locally with `TF_VAR_config_file=configurations/<name>.yaml terraform plan`

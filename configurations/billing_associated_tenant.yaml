@@ -1,5 +1,8 @@
 # ── Multi-tenant billing management ──────────────────────────────────────────
 #
+# ci:skip
+# (cross-tenant billing — requires specific billing account setup not available in CI)
+#
 # This configuration manages billing resources in a cross-tenant scenario:
 #
 #   Home tenant (Automation Tenant)     Billing tenant (Acme Engineering)

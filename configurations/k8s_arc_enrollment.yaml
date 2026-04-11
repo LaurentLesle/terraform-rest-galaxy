@@ -1,5 +1,8 @@
 # ── Local Kubernetes clusters with Azure Arc enrollment ──────────────────────
 #
+# ci:skip
+# (requires kind + Docker locally; tehcyx/kind provider unavailable in CI)
+#
 # This configuration declares local K8s clusters (via kind), configures them
 # through the Kubernetes REST API, and enrolls them into Azure Arc + Entra ID.
 #

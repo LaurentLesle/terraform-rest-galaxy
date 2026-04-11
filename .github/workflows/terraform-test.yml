@@ -65,23 +65,32 @@ jobs:
       - name: List plan-safe and live-token configs
         id: list
         run: |
-          # Plan-safe: no externals: block, no # ci:requires-live-token marker.
+          # Skipped: ci:skip marker — excluded from all CI matrices.
+          skipped_configs=$(grep -rl "^# ci:skip" configurations/*.yaml \
+            | sort \
+            | xargs -I{} basename {} .yaml \
+            | jq -R -s -c 'split("\n") | map(select(. != ""))')
+          echo "Skipping $(echo "$skipped_configs" | jq -r 'length') configs (ci:skip)"
+
+          # Plan-safe: no externals: block, no # ci:requires-live-token, no # ci:skip.
           configs=$(grep -rL "^externals:" configurations/*.yaml \
             | xargs grep -rL "^# ci:requires-live-token" \
+            | xargs grep -rL "^# ci:skip" \
             | sort \
             | xargs -I{} basename {} .yaml \
             | jq -R -s -c 'split("\n") | map(select(. != ""))')
           echo "configs=$configs" >> "$GITHUB_OUTPUT"
           echo "Discovered $(echo "$configs" | jq -r 'length') plan-safe configs"
 
-          # Live-token: configs excluded from plan-safe (have externals: or ci:requires-live-token).
+          # Live-token: have externals: or ci:requires-live-token, but NOT ci:skip.
           all_configs=$(ls configurations/*.yaml | sort \
             | xargs -I{} basename {} .yaml \
             | jq -R -s -c 'split("\n") | map(select(. != ""))')
           live_configs=$(jq -cn \
             --argjson all "$all_configs" \
             --argjson safe "$configs" \
-            '$all - $safe')
+            --argjson skip "$skipped_configs" \
+            '$all - $safe - $skip')
           echo "live_configs=$live_configs" >> "$GITHUB_OUTPUT"
           echo "Discovered $(echo "$live_configs" | jq -r 'length') live-token configs"
 
