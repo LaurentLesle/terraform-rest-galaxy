@@ -138,17 +138,10 @@ jobs:
               else
                   COMMITS=$(git log "v$VERSION" --oneline | head -50)
               fi
-              NOTES=$(cat <<INNER
-### Changes (auto-generated from commits)
-
-> **Note**: This release has no structured CHANGELOG entry.
-> Future releases should update CHANGELOG.md before tagging.
-
-\`\`\`
-${COMMITS}
-\`\`\`
-INNER
-              )
+              NOTES="### Changes (auto-generated from commits)"$'\n\n'
+              NOTES+="NOTE: This release has no structured CHANGELOG entry."$'\n'
+              NOTES+="Future releases should update CHANGELOG.md before tagging."$'\n\n'
+              NOTES+="\`\`\`"$'\n'"${COMMITS}"$'\n'"\`\`\`"
           fi
 
           # Write multi-line output
