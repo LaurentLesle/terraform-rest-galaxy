@@ -78,7 +78,7 @@ jobs:
           all_configs=$(ls configurations/*.yaml | sort \
             | xargs -I{} basename {} .yaml \
             | jq -R -s -c 'split("\n") | map(select(. != ""))')
-          live_configs=$(jq -n \
+          live_configs=$(jq -cn \
             --argjson all "$all_configs" \
             --argjson safe "$configs" \
             '$all - $safe')
@@ -248,62 +248,12 @@ jobs:
             terraform test -filter="${{ matrix.test.file }}"
           fi
 
-  # ── Register Azure providers — runs once before the apply-test matrix ───────
-  # Idempotent: re-registers providers that tests depend on (e.g. CognitiveServices).
-  # Separate job so every apply-test matrix entry doesn't repeat the apply.
-  register-providers:
-    name: "Register Azure providers"
-    needs: build-provider
-    runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request'
-    permissions:
-      id-token: write   # OIDC
-      contents: read
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Download provider artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: terraform-provider-rest
-          path: ~/.terraform.d/plugins/
-
-      - name: Install provider from artifact
-        run: .github/scripts/restore-provider.sh
-
-      - name: Azure Login (OIDC)
-        uses: azure/login@v3
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v4
-        with:
-          terraform_version: ${{ env.TF_VERSION }}
-          terraform_wrapper: false
-
-      - name: Acquire Azure token
-        id: token
-        run: |
-          TOKEN=$(az account get-access-token --resource https://management.azure.com --query accessToken -o tsv)
-          echo "::add-mask::$TOKEN"
-          echo "access_token=$TOKEN" >> "$GITHUB_OUTPUT"
-
-      - name: Apply provider registrations
-        env:
-          TF_VAR_access_token: ${{ steps.token.outputs.access_token }}
-          TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-        run: ./tf.sh apply configurations/ci_test_providers.yaml
-
   # ── Apply each test file (matrix) ───────────────────────────────────────────
   # Requires Azure credentials — runs only on push to main.
   # Each test file gets its own runner → individual pass/fail in the GitHub UI.
   apply-test:
     name: "Test ${{ matrix.test.name }}"
-    needs: [build-provider, generate-test-matrix, register-providers]
+    needs: [build-provider, generate-test-matrix]
     runs-on: ubuntu-latest
     if: github.event_name != 'pull_request'
     strategy:
