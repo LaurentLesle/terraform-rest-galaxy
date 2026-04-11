@@ -45,7 +45,7 @@ jobs:
           fi
 
       - name: Upload provider artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: terraform-provider-rest
           path: ~/.terraform.d/plugins/
@@ -64,10 +64,13 @@ jobs:
       - name: List plan-safe configs
         id: list
         run: |
-          # Exclude configs with top-level externals blocks — they require live ARM
-          # API calls and fail with a placeholder token.
+          # Exclude configs that require a live ARM token:
+          #   - top-level externals: blocks (live ARM API calls at plan time)
+          #   - # ci:requires-live-token marker (e.g. import configs with check_existance)
           # Output basenames without .yaml for clean matrix job names.
-          configs=$(grep -rL "^externals:" configurations/*.yaml | sort \
+          configs=$(grep -rL "^externals:" configurations/*.yaml \
+            | xargs grep -rL "^# ci:requires-live-token" \
+            | sort \
             | xargs -I{} basename {} .yaml \
             | jq -R -s -c 'split("\n") | map(select(. != ""))')
           echo "configs=$configs" >> "$GITHUB_OUTPUT"
@@ -83,7 +86,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Download provider artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: terraform-provider-rest
           path: ~/.terraform.d/plugins/
@@ -160,7 +163,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Download provider artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: terraform-provider-rest
           path: ~/.terraform.d/plugins/
@@ -200,7 +203,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Download provider artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: terraform-provider-rest
           path: ~/.terraform.d/plugins/
