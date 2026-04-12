@@ -9,6 +9,33 @@ You are a specialist Terraform module author. Your job is to generate production
 
 You do NOT use the `hashicorp/kubernetes` provider.
 
+## Galaxy Build Step — File Placement and Terraform Execution
+
+Source `.tf` files are organized under `galaxy/` by provider and domain. Terraform requires all `.tf` files in one flat directory, so before any `terraform` command you must build:
+
+```bash
+scripts/build-galaxy.sh          # generates .build/ with flat files
+terraform -chdir=.build plan     # all terraform commands run from .build/
+```
+
+**When creating or editing root-module `.tf` files** (Step 4), place them in `galaxy/k8s/`:
+
+| File | Galaxy path |
+|------|-------------|
+| `k8s_<plural>.tf` | `galaxy/k8s/<plural>.tf` |
+| `k8s_layers.tf` | `galaxy/k8s/_meta/layers.tf` |
+| `k8s_outputs.tf` | `galaxy/k8s/_meta/outputs.tf` |
+| `k8s_provider.tf` | `galaxy/k8s/_meta/provider.tf` |
+| `k8s_variables.tf` | `galaxy/k8s/_meta/variables.tf` |
+
+The build script derives flat filenames automatically: `galaxy/k8s/namespaces.tf` → `.build/k8s__namespaces.tf`.
+
+**Two development workflows:**
+- **Galaxy-first** (recommended): edit in `galaxy/`, run `scripts/build-galaxy.sh`, test in `.build/`
+- **Build-first** (quick iteration): edit in `.build/`, test, then run `scripts/build-galaxy.sh --reverse` to sync back
+
+When this agent says "root `k8s_<name>.tf` file", it means the source at `galaxy/k8s/<name>.tf` which becomes `.build/k8s__<name>.tf` after build.
+
 ## Key Differences from Azure ARM, Entra ID, and GitHub Modules
 
 | Aspect | Azure ARM modules | Entra ID Graph modules | GitHub REST modules | Kubernetes API modules |
@@ -227,8 +254,8 @@ When the user describes a high-level goal rather than a single resource type, fo
 Scan the repository to build a catalogue of what already exists:
 
 1. List every sub-module directory under `modules/kubernetes/` — note resource type, key variables, and key outputs
-2. List the root `kubernetes_*.tf` files — identify which resource types already have root wiring
-3. Inspect `kubernetes_layers.tf` — identify existing ref-resolution layers and their depth
+2. List the root wiring files in `galaxy/k8s/` — identify which resource types already have root wiring
+3. Inspect `galaxy/k8s/_meta/layers.tf` — identify existing ref-resolution layers and their depth
 4. Inspect `configurations/*.yaml` — note existing configuration examples
 
 ### CS-2 — Decompose the scenario into resources
@@ -674,20 +701,27 @@ Apply tests requiring real API calls need `TF_VAR_kubernetes_token` and `TF_VAR_
 ```bash
 export TF_VAR_kubernetes_host=$(kubectl config view --raw -o jsonpath='{.clusters[0].cluster.server}')
 export TF_VAR_kubernetes_token=$(kubectl create token terraform-sa -n kube-system --duration=1h)
-terraform test
+scripts/build-galaxy.sh
+terraform -chdir=.build test
 ```
 
 ### Step 7 — Validate and test
 
 **Formatting and static validation** (always run first):
 
-Run `terraform fmt -recursive modules/kubernetes/<resource_name>/` and `terraform fmt -recursive examples/kubernetes/<resource_name>/`, then `terraform validate` from the **repo root**.
+Run `terraform fmt -recursive modules/kubernetes/<resource_name>/` and `terraform fmt -recursive examples/kubernetes/<resource_name>/`, then build and validate:
+
+```bash
+scripts/build-galaxy.sh
+terraform -chdir=.build validate
+```
 
 **Run the test suite** (required after every module creation):
 
-Run from the repo root:
-```
-terraform init -backend=false && terraform test
+```bash
+scripts/build-galaxy.sh
+terraform -chdir=.build init -backend=false
+terraform -chdir=.build test
 ```
 
 All runs must reach `pass` status. Fix any failures before marking the task complete.

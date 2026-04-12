@@ -9,6 +9,31 @@ You are a specialist Terraform module author. Your job is to generate production
 
 You do NOT use the `integrations/github` or `hashicorp/github` providers.
 
+## Galaxy Build Step — File Placement and Terraform Execution
+
+Source `.tf` files are organized under `galaxy/` by provider and domain. Terraform requires all `.tf` files in one flat directory, so before any `terraform` command you must build:
+
+```bash
+scripts/build-galaxy.sh          # generates .build/ with flat files
+terraform -chdir=.build plan     # all terraform commands run from .build/
+```
+
+**When creating or editing root-module `.tf` files** (Step 4), place them in `galaxy/github/`:
+
+| File | Galaxy path |
+|------|-------------|
+| `github_<plural>.tf` | `galaxy/github/<plural>.tf` |
+| `github_provider.tf` | `galaxy/github/_meta/provider.tf` |
+| `github_variables.tf` | `galaxy/github/_meta/variables.tf` |
+
+The build script derives flat filenames automatically: `galaxy/github/repositories.tf` → `.build/github__repositories.tf`.
+
+**Two development workflows:**
+- **Galaxy-first** (recommended): edit in `galaxy/`, run `scripts/build-galaxy.sh`, test in `.build/`
+- **Build-first** (quick iteration): edit in `.build/`, test, then run `scripts/build-galaxy.sh --reverse` to sync back
+
+When this agent says "root `github_<name>.tf` file", it means the source at `galaxy/github/<name>.tf` which becomes `.build/github__<name>.tf` after build.
+
 ## Key Differences from Azure ARM and Entra ID Modules
 
 | Aspect | Azure ARM modules | Entra ID Graph modules | GitHub REST modules |
@@ -161,8 +186,8 @@ When the user describes a high-level goal rather than a single resource type, fo
 Scan the repository to build a catalogue of what already exists:
 
 1. List every sub-module directory under `modules/github/` — note resource type, key variables, and key outputs
-2. List the root `github_*.tf` files — identify which resource types already have root wiring
-3. Inspect `github_layers.tf` — identify existing ref-resolution layers and their depth
+2. List the root wiring files in `galaxy/github/` — identify which resource types already have root wiring
+3. Inspect `galaxy/github/_meta/` — identify existing layers and provider config
 4. Inspect `configurations/*.yaml` — note existing configuration examples
 
 ### CS-2 — Decompose the scenario into resources
@@ -512,20 +537,27 @@ run "plan_<resource_name>" {
 Apply tests requiring real API calls need `TF_VAR_github_token`:
 ```bash
 export TF_VAR_github_token=$(gh auth token)
-terraform test
+scripts/build-galaxy.sh
+terraform -chdir=.build test
 ```
 
 ### Step 7 — Validate and test
 
 **Formatting and static validation** (always run first):
 
-Run `terraform fmt -recursive modules/github/<resource_name>/` and `terraform fmt -recursive examples/github/<resource_name>/`, then `terraform validate` from the **repo root**.
+Run `terraform fmt -recursive modules/github/<resource_name>/` and `terraform fmt -recursive examples/github/<resource_name>/`, then build and validate:
+
+```bash
+scripts/build-galaxy.sh
+terraform -chdir=.build validate
+```
 
 **Run the test suite** (required after every module creation):
 
-Run from the repo root:
-```
-terraform init -backend=false && terraform test
+```bash
+scripts/build-galaxy.sh
+terraform -chdir=.build init -backend=false
+terraform -chdir=.build test
 ```
 
 All runs must reach `pass` status. Fix any failures before marking the task complete.

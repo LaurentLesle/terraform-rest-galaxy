@@ -35,6 +35,20 @@ terraform -chdir=.build plan   # run terraform from .build/
 
 `tf.sh` runs the build step automatically. To add a new resource file, place it in the right `galaxy/` subdirectory — the naming convention `<provider>__<sub>__<filename>` is derived automatically by replacing `/` with `__` (files in `galaxy/shared/` keep their name as-is). For example, `galaxy/azure/networking/vnets.tf` becomes `azure__networking__vnets.tf`.
 
+### Two development workflows
+
+| Workflow | Edit in | Build | Test | Sync back |
+|----------|---------|-------|------|-----------|
+| **Galaxy-first** (recommended) | `galaxy/<provider>/<domain>/<file>.tf` | `scripts/build-galaxy.sh` | `terraform -chdir=.build test` | N/A |
+| **Build-first** (quick iteration) | `.build/<flat_file>.tf` | N/A (already flat) | `terraform -chdir=.build test` | `scripts/build-galaxy.sh --reverse` |
+
+The reverse sync maps flat filenames back to galaxy paths using the `__` separator:
+- `azure__networking__route_tables.tf` → `galaxy/azure/networking/route_tables.tf`
+- `entraid__applications.tf` → `galaxy/entraid/applications.tf`
+- `main.tf` (no `__`) → `galaxy/shared/main.tf`
+
+Other build-galaxy modes: `--check` (dry-run), `--clean` (remove .build/).
+
 ## How Claude Code uses the Copilot assets
 
 | Copilot | Claude Code | Notes |

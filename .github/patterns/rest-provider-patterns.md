@@ -185,7 +185,7 @@ output "provisioning_state" {
 }
 ```
 
-This pattern is critical for `ref:` resolution in `azure_config.tf` — downstream modules need `id` and `name` at plan time to construct their own resource paths.
+This pattern is critical for `ref:` resolution in the layers file (`galaxy/azure/core/layers.tf`) — downstream modules need `id` and `name` at plan time to construct their own resource paths.
 
 ---
 
@@ -265,7 +265,7 @@ Import blocks are processed in parallel by default. Resources with cross-depende
 
 ### Solution
 
-Organize import blocks in the same layer order as `azure_config.tf`:
+Organize import blocks in the same layer order as the layers file (`galaxy/azure/core/layers.tf`):
 
 ```hcl
 # ── Layer 0b: azure_resource_groups ─────────────────────────
@@ -290,7 +290,7 @@ import { to = module.azure_virtual_network_gateway_connections["..."] ... }
 After the first `terraform apply` that imports and normalizes state, always verify:
 
 ```bash
-terraform plan -var config_file=configurations/<name>.yaml
+terraform -chdir=.build plan -var config_file=configurations/<name>.yaml
 ```
 
 **Expected**: `No changes. Your infrastructure matches the configuration.`

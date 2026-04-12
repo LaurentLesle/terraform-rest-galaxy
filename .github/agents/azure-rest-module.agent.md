@@ -9,6 +9,34 @@ You are a specialist Terraform module author. Your job is to generate production
 
 You do NOT use the `azurerm` provider.
 
+## Galaxy Build Step — File Placement and Terraform Execution
+
+Source `.tf` files are organized under `galaxy/` by provider and domain (e.g. `galaxy/azure/networking/route_tables.tf`). Terraform requires all `.tf` files in one flat directory, so before any `terraform` command you must build:
+
+```bash
+scripts/build-galaxy.sh          # generates .build/ with flat files (e.g. azure__networking__route_tables.tf)
+terraform -chdir=.build plan     # all terraform commands run from .build/
+```
+
+**When creating or editing root-module `.tf` files** (Step 4), place them in the appropriate `galaxy/` subdirectory:
+
+| File | Galaxy path |
+|------|-------------|
+| `azure_<plural>.tf` | `galaxy/azure/<domain>/<plural>.tf` (choose the domain that best fits the resource) |
+| `azure_layers.tf` | `galaxy/azure/core/layers.tf` |
+| `azure_outputs.tf` | `galaxy/azure/core/outputs.tf` |
+| `azure_provider.tf` | `galaxy/azure/core/provider.tf` |
+| `azure_variables.tf` | `galaxy/azure/core/variables.tf` |
+| `azure_versions.tf` | `galaxy/azure/core/versions.tf` |
+
+The build script derives flat filenames automatically: `galaxy/azure/storage/storage_accounts.tf` → `.build/azure__storage__storage_accounts.tf`.
+
+**Two development workflows:**
+- **Galaxy-first** (recommended): edit in `galaxy/`, run `scripts/build-galaxy.sh`, test in `.build/`
+- **Build-first** (quick iteration): edit in `.build/`, test, then run `scripts/build-galaxy.sh --reverse` to sync changes back to `galaxy/`
+
+When this agent says "root `azure_<name>.tf` file", it means the source file at `galaxy/azure/<domain>/<name>.tf` which becomes `.build/azure__<domain>__<name>.tf` after build.
+
 ### `rest_resource` vs `rest_operation`
 
 | Provider resource | When to use | Examples |
@@ -41,8 +69,8 @@ When the user describes a high-level goal rather than a single resource type, fo
 Scan the repository to build a catalogue of what already exists:
 
 1. List every sub-module directory under `modules/azure/` — note resource type, key variables, and key outputs (especially `id`, `name`, `principal_id`, `vault_uri`, `tenant_id`, etc.)
-2. List the root `azure_*.tf` files — identify which resource types already have root wiring
-3. Inspect `azure_config.tf` — identify existing ref-resolution layers and their depth
+2. List the root wiring files in `galaxy/azure/` — identify which resource types already have root wiring (e.g. `galaxy/azure/storage/storage_accounts.tf`)
+3. Inspect `galaxy/azure/core/layers.tf` — identify existing ref-resolution layers and their depth
 4. Inspect `configurations/*.yaml` — note existing configuration examples
 
 ### CS-2 — Decompose the scenario into resources
@@ -73,7 +101,7 @@ Common supporting resources to consider:
 
 ### CS-3 — Map the dependency chain
 
-Determine the ordering layers for `azure_config.tf` ref-resolution. Each layer can only reference outputs from previous layers:
+Determine the ordering layers for `galaxy/azure/core/layers.tf` ref-resolution. Each layer can only reference outputs from previous layers:
 
 ```
 Layer 0: azure_subscriptions (no cross-references)
@@ -131,18 +159,18 @@ Execute in this order:
    - Add new variables to `modules/azure/<resource_name>/variables.tf`
    - Update the `body` locals in `modules/azure/<resource_name>/main.tf`
    - Add new outputs to `modules/azure/<resource_name>/outputs.tf` if needed
-   - Update the root `azure_<plural_resource_name>.tf` variable type and module block
+   - Update the root `galaxy/azure/<domain>/<plural_resource_name>.tf` variable type and module block
 
 3. **Update root wiring**:
-   - Add new root `azure_<plural_resource_name>.tf` files for each new resource type
-   - Update `azure_config.tf` with new ref-resolution layers (maintain layer ordering)
-   - Update `azure_outputs.tf` to include all new resource types
+   - Add new `galaxy/azure/<domain>/<plural_resource_name>.tf` files for each new resource type
+   - Update `galaxy/azure/core/layers.tf` with new ref-resolution layers (maintain layer ordering)
+   - Update `galaxy/azure/core/outputs.tf` to include all new resource types
 
 4. **Create configuration YAML** — Write the `configurations/<scenario_name>.yaml` file
 
 5. **Create configuration plan test** (see CS-6)
 
-6. **Validate** — Run `terraform fmt -recursive` and `terraform validate` from the repo root
+6. **Validate** — Run `terraform fmt -recursive`, then `scripts/build-galaxy.sh && terraform -chdir=.build validate`
 
 ### CS-6 — Create configuration plan test
 
@@ -429,7 +457,7 @@ terraform {
 #### `outputs.tf`
 - `id` — the resource path computed from local path variable (e.g. `local.kv_path`), **not** from `rest_resource.<name>.id`. This ensures the `id` output is known at plan time.
 - `api_version` — hard-coded string of the selected API version
-- **Plan-time outputs** — outputs that can be derived from input variables MUST echo the input variable directly (e.g. `value = var.vault_name` for `name`, `value = var.location` for `location`). This ensures downstream `ref:` consumers and `azure_config.tf` ref-resolution contexts get values known at plan time, enabling Terraform to compute resource paths before apply.
+- **Plan-time outputs** — outputs that can be derived from input variables MUST echo the input variable directly (e.g. `value = var.vault_name` for `name`, `value = var.location` for `location`). This ensures downstream `ref:` consumers and `galaxy/azure/core/layers.tf` ref-resolution contexts get values known at plan time, enabling Terraform to compute resource paths before apply.
 - **Computed plan-time outputs** — outputs that can be deterministically computed from inputs (e.g. `vault_uri = "https://${var.vault_name}.vault.azure.net/"`) should be computed in the output, not read from API responses.
 - **API-sourced outputs** — outputs that are truly read-only and assigned by Azure at creation time (e.g. `principal_id`, `client_id`, `provisioning_state`, endpoint URLs) should still source from `rest_resource.<name>.output.<field>` using direct attribute access (NOT `jsondecode`). These remain `(known after apply)` which is expected. See [Pattern #4](../.github/patterns/rest-provider-patterns.md#4-output-access-pattern--direct-vs-jsondecode).
 - One output per **read-only** field from the spec, sourced from `rest_resource.<name>.output.<field>`
@@ -469,7 +497,7 @@ Generate a concise README with:
 
 ### Step 4 — Update the root module
 
-After generating `modules/azure/<resource_name>/`, update the three root-level files in the repository root. These files form a **mono root module** that calls every sub-module and grows over time as new resources are added.
+After generating `modules/azure/<resource_name>/`, update the root-module files under `galaxy/azure/`. These files form a **mono root module** that calls every sub-module and grows over time as new resources are added. Place new files in the appropriate `galaxy/azure/<domain>/` subdirectory (see the Galaxy Build Step section above).
 
 #### Naming rules (always pluralise relative to the sub-module)
 
@@ -539,7 +567,7 @@ module "<plural_resource_name>" {
 
 Because sub-module outputs echo input variables (plan-time known) rather than API responses, Terraform can no longer infer cross-module dependencies from data flow. Each module block in the root **must** include an explicit `depends_on` referencing the modules from the previous dependency layer.
 
-The layer ordering follows the `azure_config.tf` ref-resolution layers:
+The layer ordering follows the `galaxy/azure/core/layers.tf` ref-resolution layers:
 
 ```hcl
 # Layer 0 — no depends_on (root resources)
@@ -719,11 +747,9 @@ variable "check_existance" {
 }
 ```
 
-#### `azure_config.tf` (update if exists, create if absent)
+#### `galaxy/azure/core/layers.tf` (update if exists, create if absent)
 
-This file lives at the repo root and is created **once**. It declares the `config_file` variable, the `remote_states` variable, and a `locals` block that merges YAML-loaded resource maps with any directly-supplied `var.*` maps. When adding a new resource type, append its `local.<plural>` line — never replace the file.
-
-It also manages the **ref-resolution context** — a layered set of locals (`_ref_context_l0`, `_ref_context_l1`, etc.) that expose module outputs for `ref:` expression resolution in YAML configs.
+This file lives at `galaxy/azure/core/layers.tf` (built as `.build/azure__core__layers.tf`). It declares the **ref-resolution context** — a layered set of locals (`_ref_context_l0`, `_ref_context_l1`, etc.) that expose module outputs for `ref:` expression resolution in YAML configs. When adding a new resource type, append its layer line — never replace the file.
 
 ##### `ref:` Syntax
 
@@ -761,7 +787,7 @@ resource_group_name: ref:remote_states.hub.values.azure_resource_groups.networki
 
 ##### Layer structure
 
-The actual layer ordering in `azure_config.tf`:
+The actual layer ordering in `galaxy/azure/core/layers.tf`:
 
 | Layer | Resource types | Depends on |
 |---|---|---|
@@ -933,7 +959,7 @@ module "root" {
 - Examples call the **root module** at `source = "../../../../"`, not the sub-module directly.
 - Use flat `variables.tf` inputs (e.g. `subscription_id`, `resource_group_name`, `location`) and compose the root module's map inside `main.tf` — this keeps configuration clean and readable.
 - The `outputs.tf` exposes the full map: `output "<plural_resource_name>" { value = module.root.<plural_resource_name> }`.
-- The `config.yaml.example` file shows the **root-module equivalent** for this scenario in YAML format. Use placeholder values (e.g. `"00000000-0000-0000-0000-000000000000"` for UUIDs, `westeurope` for locations). Never include real credentials or subscription IDs. The file demonstrates how to drive the same scenario via `TF_VAR_config_file=config.yaml terraform apply` from the repo root.
+- The `config.yaml.example` file shows the **root-module equivalent** for this scenario in YAML format. Use placeholder values (e.g. `"00000000-0000-0000-0000-000000000000"` for UUIDs, `westeurope` for locations). Never include real credentials or subscription IDs. The file demonstrates how to drive the same scenario via `./tf.sh apply configurations/config.yaml` or `TF_VAR_config_file=config.yaml terraform -chdir=.build apply`.
 - Auth variables (`id_token`, `tenant_id`, `client_id`, `access_token`) all have `default = null` so either auth path can be used without providing the other. `id_token` and `access_token` must be marked `sensitive = true`.
 - Each example must be self-contained and runnable with `terraform init && terraform apply`.
 
@@ -1062,14 +1088,22 @@ run "idempotent_apply" {
 
 **Formatting and static validation** (always run first):
 
-Run `terraform fmt -recursive modules/azure/<resource_name>/` and `terraform fmt -recursive examples/azure/<resource_name>/`, then `terraform validate` from the **repo root**. Report any errors and fix them before proceeding.
+Run `terraform fmt -recursive modules/azure/<resource_name>/` and `terraform fmt -recursive examples/azure/<resource_name>/`, then build and validate:
+
+```bash
+scripts/build-galaxy.sh
+terraform -chdir=.build validate
+```
 
 **Run the test suite** (required after every module creation, modification, or version bump):
 
-Run from the repo root:
+```bash
+scripts/build-galaxy.sh
+terraform -chdir=.build init -backend=false
+terraform -chdir=.build test
 ```
-terraform init -backend=false && terraform test
-```
+
+Or use `tf.sh` which builds automatically: `./tf.sh test`
 
 All runs must reach `pass` status. Fix any failures before marking the task complete.
 
