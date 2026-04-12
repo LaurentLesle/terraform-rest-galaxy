@@ -95,6 +95,9 @@ Hero modules provide exhaustive coverage of their resource type: all writable sp
 | `data_collection_endpoint` | Azure (Microsoft.Insights/dataCollectionEndpoints) | `observability_basic.yaml`, `observability_grafana_prometheus.yaml` | API `2024-03-11`; managed identity, network ACLs, kind |
 | `data_collection_rule` | Azure (Microsoft.Insights/dataCollectionRules) | `observability_basic.yaml`, `observability_grafana_prometheus.yaml` | API `2024-03-11`; full data flow, agent settings, direct data sources, references |
 | `data_collection_rule_association` | Azure (Microsoft.Insights/dataCollectionRuleAssociations) | `observability_basic.yaml`, `observability_grafana_prometheus.yaml` | API `2024-03-11`; scope-based ARM path, mutually exclusive DCR/DCE association |
+| `monitor_private_link_scope` | Azure (Microsoft.Insights/privateLinkScopes) | `observability_private.yaml` | API `2021-09-01` (latest stable); `PrivateOnly` access mode defaults for SOC2; access mode exclusions per-endpoint |
+| `monitor_private_link_scoped_resource` | Azure (Microsoft.Insights/privateLinkScopes/scopedResources) | `observability_private.yaml` | API `2021-09-01` (latest stable); `force_new_attrs` on `linkedResourceId`; LRO polling on create/update/delete |
+| `private_dns_zone_virtual_network_link` | Azure (Microsoft.Network/privateDnsZones/virtualNetworkLinks) | `observability_private.yaml` | API `2024-06-01` (latest stable); PATCH update method; `NxDomainRedirect` resolution policy; `write_only_attrs` for immutable `location` |
 
 > To add a module to this list, it must satisfy all hero completion criteria defined in `.github/skills/tf-fix/SKILL.md` (Hero Mode section).
 

@@ -1,0 +1,17 @@
+# Azure Monitor Private Link Scope — minimum configuration example
+# Drive via: TF_VAR_config_file=configurations/my.yaml terraform -chdir=.build apply
+
+default_location: westeurope
+
+azure_resource_groups:
+  obs:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: rg-ampls-example
+    location: westeurope
+
+azure_monitor_private_link_scopes:
+  minimum:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: ref:azure_resource_groups.obs.resource_group_name
+    scope_name: ampls-example
+    location: ref:azure_resource_groups.obs.location

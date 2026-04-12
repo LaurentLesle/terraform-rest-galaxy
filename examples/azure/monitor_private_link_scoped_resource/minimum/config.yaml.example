@@ -1,0 +1,35 @@
+# Azure Monitor Private Link Scoped Resource — minimum configuration example
+# Links a Log Analytics Workspace into an existing AMPLS.
+# The AMPLS and LAW must already exist (or be in the same configuration).
+# Drive via: TF_VAR_config_file=configurations/my.yaml terraform -chdir=.build apply
+
+default_location: westeurope
+
+azure_resource_groups:
+  obs:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: rg-ampls-example
+    location: westeurope
+
+azure_monitor_private_link_scopes:
+  main:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: ref:azure_resource_groups.obs.resource_group_name
+    scope_name: ampls-example
+    location: ref:azure_resource_groups.obs.location
+
+azure_log_analytics_workspaces:
+  main:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: ref:azure_resource_groups.obs.resource_group_name
+    workspace_name: law-example
+    location: ref:azure_resource_groups.obs.location
+    sku_name: PerGB2018
+
+azure_monitor_private_link_scoped_resources:
+  minimum:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: ref:azure_resource_groups.obs.resource_group_name
+    private_link_scope_name: ref:azure_monitor_private_link_scopes.main.name
+    scoped_resource_name: link-law
+    linked_resource_id: ref:azure_log_analytics_workspaces.main.id

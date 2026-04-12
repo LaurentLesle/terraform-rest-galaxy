@@ -1,0 +1,42 @@
+# Private DNS Zone Virtual Network Link — complete configuration example
+# Links a VNet to a Private DNS Zone with all optional properties set.
+# NxDomainRedirect falls back to public DNS when private resolution returns NXDOMAIN.
+# Drive via: TF_VAR_config_file=configurations/my.yaml terraform -chdir=.build apply
+
+default_location: westeurope
+
+azure_resource_groups:
+  dns:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: rg-dns-complete
+    location: westeurope
+    tags:
+      environment: dev
+
+azure_virtual_networks:
+  main:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: ref:azure_resource_groups.dns.resource_group_name
+    virtual_network_name: vnet-complete
+    location: ref:azure_resource_groups.dns.location
+    address_space:
+      - 10.0.0.0/16
+    tags: ref:azure_resource_groups.dns.tags
+
+azure_private_dns_zones:
+  monitor:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: ref:azure_resource_groups.dns.resource_group_name
+    zone_name: privatelink.monitor.azure.com
+    tags: ref:azure_resource_groups.dns.tags
+
+azure_private_dns_zone_virtual_network_links:
+  complete:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: ref:azure_resource_groups.dns.resource_group_name
+    private_dns_zone_name: ref:azure_private_dns_zones.monitor.name
+    virtual_network_link_name: link-vnet-to-monitor-complete
+    virtual_network_id: ref:azure_virtual_networks.main.id
+    registration_enabled: false
+    resolution_policy: NxDomainRedirect
+    tags: ref:azure_resource_groups.dns.tags
