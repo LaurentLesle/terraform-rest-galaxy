@@ -13,9 +13,9 @@ Audit one or more Terraform modules against the Azure REST API specification, id
 - A module's API version is outdated and you want to sync to the latest stable spec
 - ARM returns unexpected states (e.g. `ResolvingDns`) not in the polling `pending` list
 - The spec has new writable properties that are missing from `variables.tf` / `body`
-- Read-only outputs from the spec are not exposed in `azure_outputs.tf`
+- Read-only outputs from the spec are not exposed in `galaxy/azure/core/outputs.tf`
 - Tests fail due to structural mismatches (wrong output paths, missing variables, wrong assertions)
-- Root module wiring (`azure_<plural>.tf`, `config.tf`, `azure_outputs.tf`) is out of sync with sub-modules
+- Root module wiring (`galaxy/azure/<domain>/<plural>.tf`, `galaxy/azure/core/layers.tf`, `galaxy/azure/core/outputs.tf`) is out of sync with sub-modules
 - Example configurations don't match the current module surface area
 - You want a full gap analysis report before making changes
 - **You want to promote a module to hero quality** (see Hero Mode below)
@@ -84,7 +84,7 @@ For each module, read all files and compare against the rules defined in `.githu
 | **API version** | `local.api_version` matches latest stable from spec (or latest preview if no stable exists) |
 | **Path** | Resource path matches the PUT path from spec (correct casing, segments) |
 | **Writable properties** | Every writable property from the spec has a corresponding variable in `variables.tf` and is included in the `body` in `main.tf` |
-| **Read-only properties** | Every read-only property from the spec is exposed as an output in `azure_outputs.tf` |
+| **Read-only properties** | Every read-only property from the spec is exposed as an output in `galaxy/azure/core/outputs.tf` |
 | **Polling config** | `poll_create`, `poll_update`, `poll_delete` match the spec's LRO pattern (async vs sync, correct `status_locator`, correct `url_locator`, all observed `pending` states) |
 | **check_existance** | `check_existance = var.check_existance` is used in `rest_resource` blocks (GET before PUT; adopts existing). The variable defaults to `false`; set to `true` via `TF_VAR_check_existance=true` only during brownfield import workflows (tf-import). Must NOT be hardcoded to `true` on globally-unique resources (key vaults, storage accounts) where 409 could mean name taken by another tenant or soft-deleted |
 | **Variable types** | JSON→HCL type mapping is correct (`string→string`, `integer→number`, `boolean→bool`, `object→map(any)`, `array→list(any)`) |
@@ -106,8 +106,8 @@ For each module, read all files and compare against the rules defined in `.githu
 |-------|---------------|
 | **`azure_<plural>.tf`** | Variable `type = map(object({...}))` has attributes matching every sub-module variable; module block passes all attributes; `for_each` references `local.<plural>` (not `var.<plural>`) |
 | **`depends_on`** | Module block includes `depends_on` referencing all modules from the preceding dependency layer (Layer 0 has none; Layer 1 depends on `module.azure_resource_groups`; etc.) |
-| **`azure_config.tf`** | `local.<plural>` = merge of YAML config and direct variable; ref-resolution context uses module outputs (plan-time known via input-echo pattern) |
-| **`azure_outputs.tf`** | `output "values"` map includes `<plural> = module.<plural>` |
+| **`galaxy/azure/core/layers.tf`** | `local.<plural>` = merge of YAML config and direct variable; ref-resolution context uses module outputs (plan-time known via input-echo pattern) |
+| **`galaxy/azure/core/outputs.tf`** | `output "values"` map includes `<plural> = module.<plural>` |
 | **`azure_<plural>.tf`** | Variable `type = map(object({...}))` has attributes matching every sub-module variable; module block passes all attributes; `for_each` references `local.<plural>` (not `var.<plural>`) |
 
 #### 2f. Configuration YAML files (`configurations/*.yaml`)
@@ -187,10 +187,10 @@ For each gap identified, apply the fix following the conventions in the agent sp
 
 1. **API version drift** → Update `local.api_version` in `main.tf`, update header comment (including `# stability: preview` if applicable), adjust body/variables/outputs for any schema changes
 2. **Missing writable property** → Add variable to `variables.tf`, add to `body` in `main.tf`, add to `map(object)` in root `azure_<plural>.tf`
-3. **Missing read-only output** → Add output to sub-module `azure_outputs.tf`
+3. **Missing read-only output** → Add output to sub-module `outputs.tf` and `galaxy/azure/core/outputs.tf`
 4. **Polling state missing** → Add the state string to the correct `pending` list
 5. **Test structural issue** → Fix output paths, add missing variables, fix cross-run references
-6. **Root wiring gap** → Update `azure_<plural>.tf`, `config.tf`, or `azure_outputs.tf`
+6. **Root wiring gap** → Update `galaxy/azure/<domain>/<plural>.tf`, `galaxy/azure/core/layers.tf`, or `galaxy/azure/core/outputs.tf`
 7. **Example drift** → Update variables, outputs, or config.yaml.example
 8. **Missing name availability check** → Add `rest_operation.check_name_availability` with a POST to the ARM `checkNameAvailability` endpoint, add a `lifecycle.precondition` on the main `rest_resource`, and add necessary variables (`subscription_id`) — see [Pattern #12](../../patterns/rest-provider-patterns.md#12-name-availability-pre-check-for-globally-unique-resources)
 9. **Missing resource provider registration check** → Add `data "rest_resource" "provider_check"` that GETs `/subscriptions/${var.subscription_id}/providers/<Namespace>?api-version=2025-04-01` with `output_attrs = toset(["registrationState"])`. Add a `lifecycle { precondition }` on the main `rest_resource` checking `registrationState == "Registered"`. The error message must show the YAML snippet to add, not a CLI command:
@@ -218,11 +218,12 @@ After each fix, run `terraform fmt -recursive` on affected directories.
 
 ### Step 5 — Validate
 
-Run static validation from the repo root:
+Run static validation:
 
 ```bash
 terraform fmt -recursive .
-terraform validate
+scripts/build-galaxy.sh
+terraform -chdir=.build validate
 ```
 
 Fix any errors before proceeding.
@@ -251,7 +252,7 @@ If a plan fails:
 | `Missing terraform_backend` | Config has no state block | Add `terraform_backend: type: local` — see fix #11 |
 | Precondition failed — provider not registered | The ARM provider isn't registered in the test subscription | Register the provider or adjust test variables | 
 
-After fixing plan errors, re-run `terraform validate` and `./tf.sh plan` to confirm both pass.
+After fixing plan errors, re-run `scripts/build-galaxy.sh && terraform -chdir=.build validate` and `./tf.sh plan` to confirm both pass.
 
 ### Step 6 — Run tests
 
@@ -267,7 +268,8 @@ export TF_VAR_access_token=$(az account get-access-token --resource https://mana
 export TF_VAR_subscription_id=$(az account show --query id -o tsv)
 export TF_VAR_resource_group_name=test-rg-rest-tftest
 az group create --name $TF_VAR_resource_group_name --location westeurope --subscription $TF_VAR_subscription_id -o table
-terraform init -backend=false && terraform test
+scripts/build-galaxy.sh
+terraform -chdir=.build init -backend=false && terraform -chdir=.build test
 ```
 
 **All runs must pass.** If any test fails:
@@ -304,7 +306,7 @@ These are recurring issues discovered during development of this repo:
 | Wrong output path in tests | `Reference to undeclared output value` | Change `output.X` to `output.values.X` |
 | Missing parent resource in test run | `Error: No value for required variable` | Add parent resource variable block to every `run` |
 | Location mismatch across runs | `InvalidResourceLocation` 409 | Use `ref:` or consistent hardcoded values across all runs |
-| Read-only property in body | `Error: invalid property` or silent rejection | Remove from `body`, add to `azure_outputs.tf` |
+| Read-only property in body | `Error: invalid property` or silent rejection | Remove from `body`, add to `galaxy/azure/core/outputs.tf` |
 | Stale API version | New properties not available, deprecated warnings | Update `local.api_version` and re-audit schema. If no stable version exists, use latest preview and note in header comment (`# stability: preview`) |
 | Output not plan-time known | `path = (known after apply)` for resources whose path should be deterministic | Change output to echo input variable (e.g. `value = var.vault_name`) instead of `rest_resource.*.output.*` |
 | Missing `depends_on` | `ResourceGroupNotFound` or similar 404 on create — sibling resources race | Add `depends_on = [module.<previous_layer>]` to the module block |

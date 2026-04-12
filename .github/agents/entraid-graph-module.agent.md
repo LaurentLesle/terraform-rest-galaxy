@@ -9,6 +9,33 @@ You are a specialist Terraform module author. Your job is to generate production
 
 You do NOT use the `azurerm` or `azuread` providers.
 
+## Galaxy Build Step — File Placement and Terraform Execution
+
+Source `.tf` files are organized under `galaxy/` by provider and domain. Terraform requires all `.tf` files in one flat directory, so before any `terraform` command you must build:
+
+```bash
+scripts/build-galaxy.sh          # generates .build/ with flat files
+terraform -chdir=.build plan     # all terraform commands run from .build/
+```
+
+**When creating or editing root-module `.tf` files** (Step 4), place them in `galaxy/entraid/`:
+
+| File | Galaxy path |
+|------|-------------|
+| `entraid_<plural>.tf` | `galaxy/entraid/<plural>.tf` |
+| `entraid_layers.tf` | `galaxy/entraid/_meta/layers.tf` |
+| `entraid_outputs.tf` | `galaxy/entraid/_meta/outputs.tf` |
+| `entraid_provider.tf` | `galaxy/entraid/_meta/provider.tf` |
+| `entraid_variables.tf` | `galaxy/entraid/_meta/variables.tf` |
+
+The build script derives flat filenames automatically: `galaxy/entraid/applications.tf` → `.build/entraid__applications.tf`.
+
+**Two development workflows:**
+- **Galaxy-first** (recommended): edit in `galaxy/`, run `scripts/build-galaxy.sh`, test in `.build/`
+- **Build-first** (quick iteration): edit in `.build/`, test, then run `scripts/build-galaxy.sh --reverse` to sync back
+
+When this agent says "root `entraid_<name>.tf` file", it means the source at `galaxy/entraid/<name>.tf` which becomes `.build/entraid__<name>.tf` after build.
+
 ## Key Differences from Azure ARM Modules
 
 | Aspect | Azure ARM modules | Entra ID Graph modules |
@@ -389,12 +416,13 @@ run "plan_<resource_name>" {
 Apply tests requiring real API calls need `TF_VAR_graph_access_token`:
 ```bash
 export TF_VAR_graph_access_token=$(az account get-access-token --resource https://graph.microsoft.com --query accessToken -o tsv)
-terraform test
+scripts/build-galaxy.sh
+terraform -chdir=.build test
 ```
 
 ### Step 7 — Validate and test
 
-Run `terraform fmt -recursive` and `terraform validate` from the repo root.
+Run `terraform fmt -recursive`, then `scripts/build-galaxy.sh && terraform -chdir=.build validate`.
 
 ## Constraints
 

@@ -21,6 +21,19 @@ Scaffold a production-quality versioned Terraform module for an Azure resource, 
 - The request implies resources, permissions, and cross-references that span several modules
 - A YAML configuration file in `configurations/` should demonstrate the full chain and the name of the file reflect the intent
 
+## Galaxy Build Step
+
+Source `.tf` files live in `galaxy/` organized by provider/domain. Before any `terraform` command, build the flat layout:
+
+```bash
+scripts/build-galaxy.sh          # generates .build/
+terraform -chdir=.build plan     # all terraform commands run from .build/
+```
+
+**When creating new root-module `.tf` files**, place them in the appropriate `galaxy/` subdirectory (e.g. `galaxy/azure/storage/` for a storage account resource). The build script derives the flat filename automatically. See the agent docs for the full file placement table.
+
+**Two workflows:** edit in `galaxy/` then build, or edit in `.build/` then `scripts/build-galaxy.sh --reverse` to sync back.
+
 ## Procedure
 
 ### Mode A — Single resource module
@@ -42,13 +55,13 @@ The agent will:
 1. Locate the official Azure REST API spec for the resource
 2. Parse the PUT/GET/DELETE paths and writable/read-only properties
 3. Generate `modules/azure/<resource_name>/` (versions.tf, variables.tf, main.tf, outputs.tf, README.md)
-4. Update the root module — add `azure_<plural_resource_name>.tf` and append to `azure_outputs.tf`
+4. Update the root module — add `galaxy/azure/<domain>/<plural_resource_name>.tf` and append to `galaxy/azure/core/outputs.tf`
 5. Generate `examples/azure/<resource_name>/minimum/` and `examples/azure/<resource_name>/complete/` (calling the root module)
 6. Generate tests (see `.github/instructions/testing.instructions.md` for conventions):
    - `tests/unit_azure_<resource_name>.tftest.hcl` — sub-module isolation test (plan only, with own provider block)
    - `tests/integration_azure_<resource_name>.tftest.hcl` — root module test (no provider block)
-7. Run `terraform fmt` and `terraform validate` on all generated files
-8. Run `terraform test` to verify both unit and integration tests pass
+7. Run `terraform fmt` on generated files, then `scripts/build-galaxy.sh && terraform -chdir=.build validate`
+8. Run `terraform -chdir=.build test` to verify both unit and integration tests pass
 
 ### Mode B — End-to-end scenario
 
@@ -56,10 +69,10 @@ When the user describes a high-level goal rather than a single resource type, th
 
 #### Step B.1 — Inventory existing modules
 
-Scan `modules/azure/*/` and the root `azure_*.tf` files to build a catalogue of what already exists:
+Scan `modules/azure/*/` and the root wiring files in `galaxy/azure/` to build a catalogue of what already exists:
 - List every existing sub-module directory under `modules/azure/`
 - For each, note the resource type, key variables, and key outputs (especially `id`, `name`, `principal_id`, `vault_uri`, etc.)
-- Note which `ref:` resolution layers already exist in `azure_config.tf`
+- Note which `ref:` resolution layers already exist in `galaxy/azure/core/layers.tf`
 
 #### Step B.2 — Decompose the scenario into resources
 
@@ -79,7 +92,7 @@ For each resource, classify it as:
 
 #### Step B.3 — Map the dependency chain
 
-Determine the ordering layers for `azure_config.tf` ref-resolution:
+Determine the ordering layers for `galaxy/azure/core/layers.tf` ref-resolution:
 
 - **Layer 0**: Resources with no cross-references (e.g. `azure_resource_groups`)
 - **Layer 1**: Resources that depend only on Layer 0 (e.g. `azure_user_assigned_identities`, `azure_key_vaults`)
@@ -108,15 +121,15 @@ For each **EXTEND** module:
 2. Add new variables to `modules/azure/<resource_name>/variables.tf`
 3. Update the `body` locals in `modules/azure/<resource_name>/main.tf`
 4. Add new outputs to `modules/azure/<resource_name>/outputs.tf`
-5. Update the root `azure_<plural_resource_name>.tf` variable type and module block
-6. Update `azure_config.tf` if new ref-resolution layers are needed
+5. Update the root `galaxy/azure/<domain>/<plural_resource_name>.tf` variable type and module block
+6. Update `galaxy/azure/core/layers.tf` if new ref-resolution layers are needed
 
 After all modules are ready:
-1. Update `azure_config.tf` with the new ref-resolution layers
-2. Update `azure_outputs.tf` to include all new resource types
+1. Update `galaxy/azure/core/layers.tf` with the new ref-resolution layers
+2. Update `galaxy/azure/core/outputs.tf` to include all new resource types
 3. Create the configuration YAML file in `configurations/` — **always include a `terraform_backend` block** (see Conventions below)
 4. Create the configuration lifecycle test (see Step B.6)
-5. Run `terraform fmt -recursive` and `terraform validate`
+5. Run `terraform fmt -recursive`, then `scripts/build-galaxy.sh && terraform -chdir=.build validate`
 6. Run the full lifecycle test: init → plan → apply → destroy (see Step B.7)
 
 #### Step B.6 — Create configuration lifecycle test
@@ -168,8 +181,9 @@ After implementation, run the configuration test end-to-end against a real Azure
 export TF_VAR_access_token=$(az account get-access-token --resource https://management.azure.com --query accessToken -o tsv)
 export TF_VAR_subscription_id=$(az account show --query id -o tsv)
 export TF_VAR_tenant_id=$(az account show --query tenantId -o tsv)
-terraform init -backend=false
-terraform test -filter=tests/integration_config_<scenario_name>.tftest.hcl
+scripts/build-galaxy.sh
+terraform -chdir=.build init -backend=false
+terraform -chdir=.build test -filter=tests/integration_config_<scenario_name>.tftest.hcl
 ```
 
 **All runs must pass — plan, apply, and destroy.** If any phase fails:
@@ -395,7 +409,7 @@ Remove the placeholder row `*(none yet — ...)` if it is still present.
 - **`output_attrs`**: Every `rest_resource` block must include `output_attrs = toset([...])` listing only gjson paths used by `outputs.tf`. Always include `"properties.provisioningState"`. See [Pattern #2](../../patterns/rest-provider-patterns.md#2-output_attrs--controlling-output-state-size).
 - **Output access**: Always use direct attribute access (`rest_resource.*.output.properties.foo`), never `jsondecode()`. See [Pattern #4](../../patterns/rest-provider-patterns.md#4-output-access-pattern--direct-vs-jsondecode).
 - Configuration YAML files live in `configurations/` with descriptive names (e.g. `storage_account_cmk.yaml`, `key_vault_private_endpoint.yaml`)
-- The `ref:` syntax in YAML wires cross-resource dependencies resolved at plan time by `azure_config.tf`
+- The `ref:` syntax in YAML wires cross-resource dependencies resolved at plan time by `galaxy/azure/core/layers.tf`
 - **`externals`**: Use the `externals` top-level YAML key to declare static attributes for resources not managed by Terraform (e.g. manually-created tenants, existing resource groups, GitHub organizations). Available at Layer 0 via `ref:externals.<category>.<key>.<attr>`. See [Pattern #8](../../patterns/rest-provider-patterns.md#8-external-references-externals--static-data-in-ref-context).
   > **CI impact**: any config with a top-level `externals:` block is **automatically excluded** from the plan-only CI matrix (which uses a placeholder token). It will only be validated by the `apply-tests` job on push to `main` (real OIDC token). This is intentional — `externals` entries resolve via live ARM/Graph calls that fail with 401/403 on a placeholder token.
 - Every configuration YAML **must** include a `terraform_backend` block immediately after the header comment. Use `type: local` for local execution:

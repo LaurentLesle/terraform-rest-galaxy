@@ -8,6 +8,8 @@ argument-hint: "<module-name> [complete|minimum]  — e.g. 'resource_group compl
 
 Run `terraform init` + `terraform plan` against an example configuration, automatically using local Azure CLI credentials when available.
 
+**Important:** All `terraform` commands run from `.build/`, not the repo root. Run `scripts/build-galaxy.sh` first (or use `tf.sh` which builds automatically). Source `.tf` files live in `galaxy/` organized by provider/domain.
+
 ## When to Use
 
 Whenever you see a request like:
@@ -84,17 +86,24 @@ This skill also covers running the native `terraform test` suite. All test files
 ### Quick reference
 
 ```bash
+# Build first (always required before terraform commands)
+scripts/build-galaxy.sh
+
 # All tests (unit + integration)
-terraform test
+terraform -chdir=.build test
 
 # Only unit tests (sub-module isolation, plan only)
-terraform test -filter='tests/unit_*.tftest.hcl'
+terraform -chdir=.build test -filter='tests/unit_*.tftest.hcl'
 
 # Only integration tests (root module)
-terraform test -filter='tests/integration_*.tftest.hcl'
+terraform -chdir=.build test -filter='tests/integration_*.tftest.hcl'
 
 # Single test
-terraform test -filter=tests/unit_azure_resource_group.tftest.hcl
+terraform -chdir=.build test -filter=tests/unit_azure_resource_group.tftest.hcl
+
+# Or use tf.sh which builds automatically:
+./tf.sh test
+./tf.sh test -filter=tests/unit_azure_resource_group.tftest.hcl
 ```
 
 ### Test types

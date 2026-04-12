@@ -4,6 +4,32 @@ applyTo: "**/*.tftest.hcl"
 
 # Terraform Test Conventions
 
+## Galaxy Build Step
+
+Source `.tf` files live in `galaxy/` organized by provider and domain. Terraform requires all `.tf` files in one flat directory, so before running any `terraform` command you must build the flat layout:
+
+```bash
+scripts/build-galaxy.sh          # generates .build/ with flat files
+terraform -chdir=.build test     # run tests from .build/
+```
+
+Or use `tf.sh` which runs the build automatically:
+```bash
+./tf.sh plan configurations/<config>.yaml
+```
+
+**Two development workflows:**
+
+| Workflow | Edit in | Build | Test | Sync back |
+|----------|---------|-------|------|-----------|
+| **Galaxy-first** (recommended) | `galaxy/<provider>/<domain>/<file>.tf` | `scripts/build-galaxy.sh` | `terraform -chdir=.build test` | N/A (source is galaxy/) |
+| **Build-first** (quick iteration) | `.build/<flat_file>.tf` | N/A (already flat) | `terraform -chdir=.build test` | `scripts/build-galaxy.sh --reverse` |
+
+The reverse sync maps flat filenames back to galaxy paths using the `__` separator convention:
+- `azure__networking__route_tables.tf` → `galaxy/azure/networking/route_tables.tf`
+- `entraid__applications.tf` → `galaxy/entraid/applications.tf`
+- `main.tf` (no `__`) → `galaxy/shared/main.tf`
+
 ## Directory Layout
 
 Real test files live in categorised subdirectories; **symlinks** in the top-level `tests/` directory point to them so that `terraform test` (which only scans the immediate `tests/` folder) discovers every file.
@@ -28,8 +54,8 @@ tests/
 1. Create the real file in the appropriate subdirectory.
 2. Create a relative symlink in `tests/`: `ln -s <subdir>/<filename> tests/<filename>`
 
-Run all tests: `terraform test` from the repo root.
-Run one test: `terraform test -filter=tests/<filename>.tftest.hcl`
+Run all tests: `terraform -chdir=.build test` (after running `scripts/build-galaxy.sh`).
+Run one test: `terraform -chdir=.build test -filter=tests/<filename>.tftest.hcl`
 
 ## Test Categories
 
@@ -45,7 +71,7 @@ Tests are split into **unit** and **integration** tests, distinguished by filena
 
 **Structure:**
 - Declares its **own provider block** (needed because `module { source }` creates a separate provider context)
-- Uses a `run` block with `command = plan` and `module { source = "./modules/azure/<name>" }` (or `./modules/entraid/<name>`)
+- Uses a `run` block with `command = plan` and `module { source = "./modules/azure/<name>" }` (or `./modules/entraid/<name>`) — these relative paths resolve from `.build/` via its `modules` symlink
 - Passes fake/placeholder values for all required variables
 - Asserts only **plan-time-known** outputs (values derived from input variables, not from `rest_resource.*.output`)
 - Token is always `"placeholder"` — the plan never calls Azure
@@ -230,24 +256,35 @@ For composite scenarios with a YAML config, also create:
 
 ## Running Tests
 
+All `terraform` commands run from `.build/`. Always build first:
+
 ```bash
+# Build the flat layout
+scripts/build-galaxy.sh
+
 # All tests (unit + integration)
-terraform test
+terraform -chdir=.build test
 
 # Only unit tests
-terraform test -filter='tests/unit_*.tftest.hcl'
+terraform -chdir=.build test -filter='tests/unit_*.tftest.hcl'
 
 # Only integration tests
-terraform test -filter='tests/integration_*.tftest.hcl'
+terraform -chdir=.build test -filter='tests/integration_*.tftest.hcl'
 
 # Single test
-terraform test -filter=tests/unit_azure_resource_group.tftest.hcl
+terraform -chdir=.build test -filter=tests/unit_azure_resource_group.tftest.hcl
 
 # Apply tests need real credentials
 export TF_VAR_access_token=$(az account get-access-token --resource https://management.azure.com --query accessToken -o tsv)
 export TF_VAR_graph_access_token=$(az account get-access-token --resource https://graph.microsoft.com --query accessToken -o tsv)
 export TF_VAR_subscription_id=$(az account show --query id -o tsv)
-terraform test
+terraform -chdir=.build test
+```
+
+Or use `tf.sh` which builds automatically:
+```bash
+./tf.sh test
+./tf.sh test -filter=tests/unit_azure_resource_group.tftest.hcl
 ```
 
 **Note:** `terraform test -filter` does NOT support globs. Each `-filter` flag matches one file. To run multiple specific tests, use multiple `-filter` flags.

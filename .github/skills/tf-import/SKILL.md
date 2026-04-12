@@ -394,8 +394,9 @@ This eliminates the need for import blocks entirely. The provider will:
 ### Step 7 — Initialize and plan
 
 ```bash
-terraform init -backend=false
-TF_VAR_check_existance=true terraform plan -var config_file=configurations/import_<scope_name>.yaml
+scripts/build-galaxy.sh
+terraform -chdir=.build init -backend=false
+TF_VAR_check_existance=true terraform -chdir=.build plan -var config_file=configurations/import_<scope_name>.yaml
 ```
 
 **Interpret the plan output:**
