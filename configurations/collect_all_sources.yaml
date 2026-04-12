@@ -1,0 +1,220 @@
+# ── Full Collection Stack — All Source Types ────────────────────────────────────
+# Combines all collection scenarios in one deployment:
+#   dcr-perf     : Performance counters (CPU+memory, 15s) → AMW + LAW
+#   dcr-events   : Windows event logs (Application+System errors) → LAW
+#   dcr-syslog   : Linux syslog (auth+daemon errors) → LAW
+#   dcr-custom   : Custom JSON app logs + IIS logs → LAW
+# All DCRs share one resource group, one LAW, one AMW, and one DCE.
+# subscription_id: 00000000-0000-0000-0000-000000000000
+
+terraform_backend:
+  type: local
+  path: collect_all_sources.tfstate
+
+default_location: westeurope
+
+azure_resource_groups:
+  all:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: rg-collect-all-sources
+    location: westeurope
+    tags:
+      environment: production
+      scenario: full-collection-stack
+
+azure_monitor_workspaces:
+  all:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: ref:azure_resource_groups.all.resource_group_name
+    monitor_workspace_name: amw-collect-all
+    location: ref:azure_resource_groups.all.location
+    tags: ref:azure_resource_groups.all.tags
+
+azure_log_analytics_workspaces:
+  all:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: ref:azure_resource_groups.all.resource_group_name
+    workspace_name: law-collect-all
+    location: ref:azure_resource_groups.all.location
+    sku_name: PerGB2018
+    retention_in_days: 90
+    features_disable_local_auth: true
+    tags: ref:azure_resource_groups.all.tags
+
+azure_data_collection_endpoints:
+  all:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: ref:azure_resource_groups.all.resource_group_name
+    data_collection_endpoint_name: dce-collect-all
+    location: ref:azure_resource_groups.all.location
+    public_network_access: Enabled
+    tags: ref:azure_resource_groups.all.tags
+
+azure_data_collection_rules:
+  # DCR 1: Performance counters → AMW (Prometheus) + LAW (deep storage)
+  perf:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: ref:azure_resource_groups.all.resource_group_name
+    data_collection_rule_name: dcr-collect-all-perf
+    location: ref:azure_resource_groups.all.location
+    description: Performance counter collection at 15s intervals to AMW and LAW
+    data_collection_endpoint_id: ref:azure_data_collection_endpoints.all.id
+    destinations:
+      logAnalytics:
+        - workspaceResourceId: ref:azure_log_analytics_workspaces.all.id
+          name: law-destination
+      azureMonitorMetrics:
+        name: amw-destination
+    data_flows:
+      - streams:
+          - Microsoft-InsightsMetrics
+        destinations:
+          - amw-destination
+      - streams:
+          - Microsoft-Perf
+        destinations:
+          - law-destination
+    data_sources:
+      performanceCounters:
+        - name: perf-cpu-memory
+          streams:
+            - Microsoft-Perf
+            - Microsoft-InsightsMetrics
+          samplingFrequencyInSeconds: 15
+          counterSpecifiers:
+            - "\\Processor Information(_Total)\\% Processor Time"
+            - "\\Processor Information(_Total)\\% User Time"
+            - "\\Processor Information(_Total)\\% Privileged Time"
+            - "\\Memory\\Available Bytes"
+            - "\\Memory\\% Committed Bytes In Use"
+            - "\\Memory\\Pool Paged Bytes"
+    tags: ref:azure_resource_groups.all.tags
+
+  # DCR 2: Windows event logs — Application and System errors → LAW
+  events:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: ref:azure_resource_groups.all.resource_group_name
+    data_collection_rule_name: dcr-collect-all-events
+    location: ref:azure_resource_groups.all.location
+    kind: Windows
+    description: Windows Application and System error event log collection to LAW
+    data_collection_endpoint_id: ref:azure_data_collection_endpoints.all.id
+    destinations:
+      logAnalytics:
+        - workspaceResourceId: ref:azure_log_analytics_workspaces.all.id
+          name: law-destination
+    data_flows:
+      - streams:
+          - Microsoft-WindowsEvent
+        destinations:
+          - law-destination
+    data_sources:
+      windowsEventLogs:
+        - name: winevt-application-errors
+          streams:
+            - Microsoft-WindowsEvent
+          xPathQueries:
+            - "Application!*[System[(Level=1 or Level=2)]]"
+        - name: winevt-system-errors
+          streams:
+            - Microsoft-WindowsEvent
+          xPathQueries:
+            - "System!*[System[(Level=1 or Level=2 or Level=3)]]"
+    tags: ref:azure_resource_groups.all.tags
+
+  # DCR 3: Linux syslog — auth and daemon facilities → LAW
+  syslog:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: ref:azure_resource_groups.all.resource_group_name
+    data_collection_rule_name: dcr-collect-all-syslog
+    location: ref:azure_resource_groups.all.location
+    kind: Linux
+    description: Linux auth and daemon syslog collection to LAW
+    data_collection_endpoint_id: ref:azure_data_collection_endpoints.all.id
+    destinations:
+      logAnalytics:
+        - workspaceResourceId: ref:azure_log_analytics_workspaces.all.id
+          name: law-destination
+    data_flows:
+      - streams:
+          - Microsoft-Syslog
+        destinations:
+          - law-destination
+    data_sources:
+      syslog:
+        - name: syslog-auth
+          streams:
+            - Microsoft-Syslog
+          facilityNames:
+            - auth
+          logLevels:
+            - Warning
+            - Error
+            - Critical
+            - Alert
+            - Emergency
+        - name: syslog-daemon
+          streams:
+            - Microsoft-Syslog
+          facilityNames:
+            - daemon
+          logLevels:
+            - Error
+            - Critical
+            - Alert
+            - Emergency
+    tags: ref:azure_resource_groups.all.tags
+
+  # DCR 4: Custom JSON app logs + IIS logs → LAW
+  custom:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: ref:azure_resource_groups.all.resource_group_name
+    data_collection_rule_name: dcr-collect-all-custom
+    location: ref:azure_resource_groups.all.location
+    description: Custom JSON application logs and IIS logs to LAW
+    data_collection_endpoint_id: ref:azure_data_collection_endpoints.all.id
+    stream_declarations:
+      Custom-AppJsonLogs:
+        columns:
+          - name: TimeGenerated
+            type: datetime
+          - name: Level
+            type: string
+          - name: Message
+            type: string
+          - name: CorrelationId
+            type: string
+          - name: UserId
+            type: string
+          - name: RawData
+            type: string
+    destinations:
+      logAnalytics:
+        - workspaceResourceId: ref:azure_log_analytics_workspaces.all.id
+          name: law-destination
+    data_flows:
+      - streams:
+          - Custom-AppJsonLogs
+        destinations:
+          - law-destination
+        output_stream: Custom-AppJsonLogs
+        transform_kql: "source | extend d = parse_json(RawData) | project TimeGenerated = todatetime(d.timestamp), Level = tostring(d.level), Message = tostring(d.message), CorrelationId = tostring(d.correlationId), UserId = tostring(d.userId)"
+      - streams:
+          - Microsoft-W3CIISLog
+        destinations:
+          - law-destination
+    data_sources:
+      logFiles:
+        - name: logfile-app-json
+          streams:
+            - Custom-AppJsonLogs
+          filePatterns:
+            - "/var/log/myapp/*.json"
+          format: json
+      iisLogs:
+        - name: iislogs-w3svc1
+          streams:
+            - Microsoft-W3CIISLog
+          logDirectories:
+            - "C:\\inetpub\\logs\\LogFiles\\W3SVC1"
+    tags: ref:azure_resource_groups.all.tags
