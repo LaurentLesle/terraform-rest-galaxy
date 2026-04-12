@@ -3,22 +3,22 @@
     "azure-specs": {
       "type": "stdio",
       "command": "python3",
-      "args": ["../.github/mcp/azure-specs-server.py"]
+      "args": [".github/mcp/azure-specs-server.py"]
     },
     "msgraph-specs": {
       "type": "stdio",
       "command": "python3",
-      "args": ["../.github/mcp/msgraph-specs-server.py"]
+      "args": [".github/mcp/msgraph-specs-server.py"]
     },
     "github-specs": {
       "type": "stdio",
       "command": "python3",
-      "args": ["../.github/mcp/github-specs-server.py"]
+      "args": [".github/mcp/github-specs-server.py"]
     },
     "kubernetes-specs": {
       "type": "stdio",
       "command": "python3",
-      "args": ["../.github/mcp/kubernetes-specs-server.py"]
+      "args": [".github/mcp/kubernetes-specs-server.py"]
     },
     "drawio": {
       "type": "stdio",

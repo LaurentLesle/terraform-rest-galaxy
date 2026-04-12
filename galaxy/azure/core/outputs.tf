@@ -71,6 +71,15 @@ output "azure_values" {
     azure_foundry_accounts                            = module.azure_foundry_accounts
     azure_foundry_managed_networks                    = module.azure_foundry_managed_networks
     azure_foundry_deployments                         = module.azure_foundry_deployments
+    azure_monitor_workspaces                          = module.azure_monitor_workspaces
+    azure_log_analytics_workspaces                    = module.azure_log_analytics_workspaces
+    azure_managed_grafanas                            = module.azure_managed_grafanas
+    azure_data_collection_endpoints                   = module.azure_data_collection_endpoints
+    azure_data_collection_rules                       = module.azure_data_collection_rules
+    azure_data_collection_rule_associations           = module.azure_data_collection_rule_associations
+    azure_monitor_private_link_scopes                 = module.azure_monitor_private_link_scopes
+    azure_monitor_private_link_scoped_resources       = module.azure_monitor_private_link_scoped_resources
+    azure_private_dns_zone_virtual_network_links      = module.azure_private_dns_zone_virtual_network_links
   } : k => v if length(v) > 0 }
 }
 

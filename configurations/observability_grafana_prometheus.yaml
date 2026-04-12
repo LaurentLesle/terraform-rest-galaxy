@@ -1,0 +1,109 @@
+default_location: westeurope
+
+terraform_backend:
+  type: local
+  path: observability_grafana_prometheus.tfstate
+
+azure_resource_groups:
+  obs-grafana:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: rg-observability-grafana
+    location: westeurope
+    tags:
+      environment: dev
+      scenario: observability-grafana-prometheus
+
+azure_user_assigned_identities:
+  grafana:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: ref:azure_resource_groups.obs-grafana.resource_group_name
+    identity_name: id-grafana-observability
+    location: ref:azure_resource_groups.obs-grafana.location
+    tags: ref:azure_resource_groups.obs-grafana.tags
+
+azure_monitor_workspaces:
+  obs-grafana:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: ref:azure_resource_groups.obs-grafana.resource_group_name
+    monitor_workspace_name: amw-observability-grafana
+    location: ref:azure_resource_groups.obs-grafana.location
+    tags: ref:azure_resource_groups.obs-grafana.tags
+
+azure_log_analytics_workspaces:
+  obs-grafana:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: ref:azure_resource_groups.obs-grafana.resource_group_name
+    workspace_name: law-observability-grafana
+    location: ref:azure_resource_groups.obs-grafana.location
+    sku_name: PerGB2018
+    retention_in_days: 30
+    features_disable_local_auth: true
+    tags: ref:azure_resource_groups.obs-grafana.tags
+
+azure_managed_grafanas:
+  obs-grafana:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: ref:azure_resource_groups.obs-grafana.resource_group_name
+    grafana_name: grafana-observability
+    location: ref:azure_resource_groups.obs-grafana.location
+    sku_name: Standard
+    identity_type: UserAssigned
+    identity_user_assigned_identity_ids:
+      - ref:azure_user_assigned_identities.grafana.id
+    public_network_access: Enabled
+    zone_redundancy: Disabled
+    azure_monitor_workspace_integrations:
+      - azure_monitor_workspace_resource_id: ref:azure_monitor_workspaces.obs-grafana.id
+    tags: ref:azure_resource_groups.obs-grafana.tags
+
+azure_data_collection_endpoints:
+  obs-grafana:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: ref:azure_resource_groups.obs-grafana.resource_group_name
+    data_collection_endpoint_name: dce-observability-grafana
+    location: ref:azure_resource_groups.obs-grafana.location
+    public_network_access: Enabled
+    tags: ref:azure_resource_groups.obs-grafana.tags
+
+azure_data_collection_rules:
+  obs-grafana:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: ref:azure_resource_groups.obs-grafana.resource_group_name
+    data_collection_rule_name: dcr-observability-grafana
+    location: ref:azure_resource_groups.obs-grafana.location
+    description: Grafana + Prometheus observability data collection rule
+    data_collection_endpoint_id: ref:azure_data_collection_endpoints.obs-grafana.id
+    destinations:
+      logAnalytics:
+        - workspaceResourceId: ref:azure_log_analytics_workspaces.obs-grafana.id
+          name: law-destination
+      azureMonitorMetrics:
+        name: amw-destination
+    data_flows:
+      - streams:
+          - Microsoft-InsightsMetrics
+        destinations:
+          - amw-destination
+      - streams:
+          - Microsoft-Perf
+        destinations:
+          - law-destination
+    data_sources:
+      prometheusForwarder:
+        - name: prometheus-basic
+          streams:
+            - Microsoft-PrometheusMetrics
+          labelIncludeFilter: {}
+    tags: ref:azure_resource_groups.obs-grafana.tags
+
+azure_role_assignments:
+  grafana-monitoring-data-reader:
+    scope: ref:azure_monitor_workspaces.obs-grafana.id
+    principal_id: ref:azure_user_assigned_identities.grafana.principal_id
+    # Monitoring Data Reader (built-in)
+    role_definition_id: /providers/Microsoft.Authorization/roleDefinitions/b0d8363b-8ddd-447d-831f-62ca05bff136
+  grafana-law-reader:
+    scope: ref:azure_log_analytics_workspaces.obs-grafana.id
+    principal_id: ref:azure_user_assigned_identities.grafana.principal_id
+    # Log Analytics Reader (built-in)
+    role_definition_id: /providers/Microsoft.Authorization/roleDefinitions/73c42c96-874c-492b-b04d-ab87d138a893
