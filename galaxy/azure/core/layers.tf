@@ -43,10 +43,11 @@ locals {
     }
   }
 
-  # ── Layer 0b: + resource_groups, tls_private_keys ─────────────────────
+  # ── Layer 0b: + resource_groups, tls_private_keys, management_groups ──
   _ctx_l0b = merge(local._ctx_l0, {
-    azure_resource_groups = local._rg_ctx
-    tls_private_keys      = local._tls_ctx
+    azure_resource_groups   = local._rg_ctx
+    tls_private_keys        = local._tls_ctx
+    azure_management_groups = local._mg_ctx
   })
 
   # ── Layer 0c: + network_managers (promoted — IPAM chain must resolve before networking)
@@ -68,6 +69,7 @@ locals {
 
   # ── Layer 1: + all L1 resources (starts from L0e — IPAM refs available) ─
   _ctx_l1 = merge(local._ctx_l0e, {
+    azure_policy_definitions              = local._pd_ctx
     azure_user_assigned_identities        = local._uai_ctx
     azure_key_vaults                      = local._kv_ctx
     azure_management_locks                = local._mlock_ctx
@@ -99,8 +101,9 @@ locals {
   # ── Layer 2: + all L2 resources ────────────────────────────────────────
   _ctx_l2 = merge(local._ctx_l1, {
     # Application Insights resolves at L1 (needs LAW id) and is exposed at L2
-    azure_application_insights     = local._appi_ctx
+    azure_application_insights       = local._appi_ctx
     azure_managed_grafanas           = local._grafana_ctx
+    azure_policy_set_definitions     = local._psd_ctx
     azure_foundry_accounts           = local._fa_ctx
     azure_arc_connected_clusters     = local._arc_cc_ctx
     azure_key_vault_keys             = local._kvk_ctx
@@ -126,6 +129,7 @@ locals {
     azure_scheduled_query_rules   = local._sqr_ctx
     azure_activity_log_alerts     = local._ala_ctx
     azure_alert_processing_rules  = local._apr_ctx
+    azure_policy_assignments      = local._pa_ctx
     azure_role_assignments                    = local._ra_ctx
     azure_storage_accounts                    = local._sa_ctx
     azure_data_collection_rules               = local._dcr_ctx

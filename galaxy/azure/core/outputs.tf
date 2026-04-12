@@ -41,6 +41,10 @@ output "azure_values" {
     azure_arc_connected_clusters                      = module.azure_arc_connected_clusters
     azure_arc_kubernetes_extensions                   = module.azure_arc_kubernetes_extensions
     azure_management_locks                            = module.azure_management_locks
+    azure_management_groups                           = module.azure_management_groups
+    azure_policy_definitions                          = module.azure_policy_definitions
+    azure_policy_set_definitions                      = module.azure_policy_set_definitions
+    azure_policy_assignments                          = module.azure_policy_assignments
     azure_storage_account_containers                  = module.azure_storage_account_containers
     azure_storage_account_blob_services               = module.azure_storage_account_blob_services
     azure_storage_account_file_services               = module.azure_storage_account_file_services
