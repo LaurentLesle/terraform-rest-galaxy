@@ -20,12 +20,17 @@ variable "access_token" {
   default   = "placeholder"
 }
 
+variable "subscription_id" {
+  type    = string
+  default = "00000000-0000-0000-0000-000000000000"
+}
+
 run "plan_observability_app_monitoring" {
   command = plan
 
   variables {
     config_file     = "configurations/observability_app_monitoring.yaml"
-    subscription_id = "00000000-0000-0000-0000-000000000000"
+    subscription_id = var.subscription_id
     tenant_id       = "00000000-0000-0000-0000-000000000000"
   }
 

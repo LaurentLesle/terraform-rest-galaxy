@@ -4,7 +4,6 @@
 # Medium-frequency counters (30s): disk I/O, network bytes.
 # Low-frequency counters (60s): disk space, process count, system calls.
 # Dual destination: Azure Monitor Workspace (Prometheus/AMW) + Log Analytics.
-# subscription_id: 00000000-0000-0000-0000-000000000000
 
 terraform_backend:
   type: local
@@ -14,7 +13,6 @@ default_location: westeurope
 
 azure_resource_groups:
   perf:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: rg-collect-perf-metrics
     location: westeurope
     tags:
@@ -23,7 +21,6 @@ azure_resource_groups:
 
 azure_monitor_workspaces:
   perf:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.perf.resource_group_name
     monitor_workspace_name: amw-collect-perf
     location: ref:azure_resource_groups.perf.location
@@ -31,7 +28,6 @@ azure_monitor_workspaces:
 
 azure_log_analytics_workspaces:
   perf:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.perf.resource_group_name
     workspace_name: law-collect-perf
     location: ref:azure_resource_groups.perf.location
@@ -42,7 +38,6 @@ azure_log_analytics_workspaces:
 
 azure_data_collection_endpoints:
   perf:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.perf.resource_group_name
     data_collection_endpoint_name: dce-collect-perf
     location: ref:azure_resource_groups.perf.location
@@ -51,7 +46,6 @@ azure_data_collection_endpoints:
 
 azure_data_collection_rules:
   perf:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.perf.resource_group_name
     data_collection_rule_name: dcr-collect-perf-metrics
     location: ref:azure_resource_groups.perf.location

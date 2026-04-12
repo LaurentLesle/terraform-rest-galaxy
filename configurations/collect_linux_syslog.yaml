@@ -2,7 +2,6 @@
 # Linux syslog collection with per-facility log level filtering.
 # Facilities: kern, daemon, auth, syslog, user, cron — each at appropriate levels.
 # Destination: Log Analytics Workspace.
-# subscription_id: 00000000-0000-0000-0000-000000000000
 
 terraform_backend:
   type: local
@@ -12,7 +11,6 @@ default_location: westeurope
 
 azure_resource_groups:
   syslog:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: rg-collect-linux-syslog
     location: westeurope
     tags:
@@ -21,7 +19,6 @@ azure_resource_groups:
 
 azure_log_analytics_workspaces:
   syslog:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.syslog.resource_group_name
     workspace_name: law-collect-syslog
     location: ref:azure_resource_groups.syslog.location
@@ -32,7 +29,6 @@ azure_log_analytics_workspaces:
 
 azure_data_collection_endpoints:
   syslog:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.syslog.resource_group_name
     data_collection_endpoint_name: dce-collect-syslog
     location: ref:azure_resource_groups.syslog.location
@@ -41,7 +37,6 @@ azure_data_collection_endpoints:
 
 azure_data_collection_rules:
   syslog:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.syslog.resource_group_name
     data_collection_rule_name: dcr-collect-linux-syslog
     location: ref:azure_resource_groups.syslog.location

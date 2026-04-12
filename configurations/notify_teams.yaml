@@ -1,0 +1,243 @@
+# ── Azure Observability — Teams Notifications via Action Groups ───────────────
+# Demonstrates sending alert notifications to Microsoft Teams channels.
+#
+# Two approaches are shown:
+#
+#   1. Teams Incoming Webhook (webhook_receivers)
+#      Fastest to set up. In Teams: channel → ⋯ → Connectors → Incoming Webhook.
+#      Copy the webhook URL and paste as service_uri below.
+#      NOTE: Microsoft is deprecating Office 365 Connectors in late 2025.
+#      For new deployments prefer approach 2.
+#
+#   2. Power Automate Workflow Webhook (webhook_receivers)
+#      Recommended for new deployments. In Power Automate: create a flow with
+#      "When a HTTP request is received" trigger → "Post message in a chat or channel".
+#      The flow HTTP trigger URL becomes the service_uri below.
+#      use_common_alert_schema: true sends a standardised JSON payload the flow
+#      can parse with: triggerBody()?['data']?['essentials']
+#
+# Replace all placeholder URLs before applying to a real subscription.
+#
+
+terraform_backend:
+  type: local
+  path: notify_teams.tfstate
+
+default_location: westeurope
+
+# ── Resource Group ────────────────────────────────────────────────────────────
+
+azure_resource_groups:
+  notify:
+    resource_group_name: rg-notify-teams
+    location: westeurope
+    tags:
+      scenario: teams-notifications
+
+# ── Log Analytics Workspace (needed to scope log-based alerts) ────────────────
+
+azure_log_analytics_workspaces:
+  notify:
+    resource_group_name: ref:azure_resource_groups.notify.resource_group_name
+    workspace_name: law-notify-teams
+    location: ref:azure_resource_groups.notify.location
+    sku_name: PerGB2018
+    retention_in_days: 30
+    tags: ref:azure_resource_groups.notify.tags
+
+# ── Action Groups ─────────────────────────────────────────────────────────────
+#
+# Three action groups routing to different Teams channels by severity:
+#   - critical-alerts  → #sre-critical  channel (P1/P2 incidents)
+#   - warning-alerts   → #platform-warnings channel (P3 issues, review next day)
+#   - info-alerts      → #platform-info channel (informational, no action needed)
+#
+# Each uses use_common_alert_schema: true so the payload shape is consistent
+# regardless of the alert type (metric, log, activity log).
+
+azure_action_groups:
+  critical:
+    resource_group_name: ref:azure_resource_groups.notify.resource_group_name
+    action_group_name: ag-critical-alerts
+    short_name: critical         # max 12 chars — shown in mobile notifications
+    enabled: true
+    # Approach 1: Teams Incoming Webhook (legacy, simple)
+    # Replace with your channel's incoming webhook URL from Teams → Connectors.
+    webhook_receivers:
+      - name: teams-sre-critical
+        service_uri: https://myorg.webhook.office.com/webhookb2/00000000-0000-0000-0000-000000000000@00000000-0000-0000-0000-000000000000/IncomingWebhook/00000000000000000000000000000000/00000000-0000-0000-0000-000000000000
+        use_common_alert_schema: true
+    tags: ref:azure_resource_groups.notify.tags
+
+  warning:
+    resource_group_name: ref:azure_resource_groups.notify.resource_group_name
+    action_group_name: ag-warning-alerts
+    short_name: warning
+    enabled: true
+    # Approach 2: Power Automate Workflow Webhook (recommended for new deployments)
+    # Create a flow: HTTP trigger → Teams "Post message in a chat or channel".
+    # The flow can parse: triggerBody()?['data']?['essentials']?['alertRule']
+    webhook_receivers:
+      - name: teams-platform-warnings
+        service_uri: https://prod-00.westeurope.logic.azure.com:443/workflows/00000000000000000000000000000000/triggers/manual/paths/invoke?api-version=2016-06-01&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=placeholder
+        use_common_alert_schema: true
+    tags: ref:azure_resource_groups.notify.tags
+
+  info:
+    resource_group_name: ref:azure_resource_groups.notify.resource_group_name
+    action_group_name: ag-info-alerts
+    short_name: info
+    enabled: true
+    webhook_receivers:
+      - name: teams-platform-info
+        service_uri: https://prod-01.westeurope.logic.azure.com:443/workflows/11111111111111111111111111111111/triggers/manual/paths/invoke?api-version=2016-06-01&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=placeholder
+        use_common_alert_schema: true
+    tags: ref:azure_resource_groups.notify.tags
+
+# ── Metric Alerts ─────────────────────────────────────────────────────────────
+#
+# Severity 0-4: 0 = Critical, 1 = Error, 2 = Warning, 3 = Informational, 4 = Verbose
+# Route to Teams channels by severity.
+
+azure_metric_alerts:
+  high-cpu-critical:
+    resource_group_name: ref:azure_resource_groups.notify.resource_group_name
+    metric_alert_name: alert-cpu-critical
+    description: CPU usage exceeded 95% — immediate action required
+    severity: 0
+    enabled: true
+    auto_mitigate: true
+    evaluation_frequency: PT1M
+    window_size: PT5M
+    target_resource_type: Microsoft.Compute/virtualMachines
+    target_resource_region: westeurope
+    # Scope: subscription-level — replace with specific resource id in production
+    scopes:
+      - /subscriptions/00000000-0000-0000-0000-000000000000
+    criteria:
+      odata.type: Microsoft.Azure.Monitor.MultipleResourceMultipleMetricCriteria
+      allOf:
+        - name: cpu-critical-criterion
+          metricNamespace: Microsoft.Compute/virtualMachines
+          metricName: Percentage CPU
+          operator: GreaterThan
+          threshold: 95
+          timeAggregation: Average
+          criterionType: StaticThresholdCriterion
+    actions:
+      - action_group_id: ref:azure_action_groups.critical.id
+
+  high-cpu-warning:
+    resource_group_name: ref:azure_resource_groups.notify.resource_group_name
+    metric_alert_name: alert-cpu-warning
+    description: CPU usage exceeded 80% — review within business hours
+    severity: 2
+    enabled: true
+    auto_mitigate: true
+    evaluation_frequency: PT5M
+    window_size: PT15M
+    target_resource_type: Microsoft.Compute/virtualMachines
+    target_resource_region: westeurope
+    scopes:
+      - /subscriptions/00000000-0000-0000-0000-000000000000
+    criteria:
+      odata.type: Microsoft.Azure.Monitor.MultipleResourceMultipleMetricCriteria
+      allOf:
+        - name: cpu-warning-criterion
+          metricNamespace: Microsoft.Compute/virtualMachines
+          metricName: Percentage CPU
+          operator: GreaterThan
+          threshold: 80
+          timeAggregation: Average
+          criterionType: StaticThresholdCriterion
+    actions:
+      - action_group_id: ref:azure_action_groups.warning.id
+
+# ── Scheduled Query Rules (Log Alerts → Teams) ────────────────────────────────
+
+azure_scheduled_query_rules:
+  failed-auth:
+    resource_group_name: ref:azure_resource_groups.notify.resource_group_name
+    rule_name: sqr-failed-auth-teams
+    description: More than 10 failed authentication attempts in 5 minutes → Teams #sre-critical
+    severity: 1
+    enabled: true
+    scopes:
+      - ref:azure_log_analytics_workspaces.notify.id
+    evaluation_frequency: PT5M
+    window_duration: PT5M
+    criteria:
+      all_of:
+        - query: "SecurityEvent | where EventID == 4625 | summarize count() by bin(TimeGenerated, 5m) | where count_ > 10"
+          time_aggregation: Count
+          threshold: 0
+          operator: GreaterThan
+          failing_periods:
+            min_failing_periods_to_alert: 1
+            number_of_evaluation_periods: 1
+    actions:
+      action_groups:
+        - ref:azure_action_groups.critical.id
+
+  app-errors:
+    resource_group_name: ref:azure_resource_groups.notify.resource_group_name
+    rule_name: sqr-app-errors-teams
+    description: Application error rate exceeded threshold → Teams #platform-warnings
+    severity: 2
+    enabled: true
+    scopes:
+      - ref:azure_log_analytics_workspaces.notify.id
+    evaluation_frequency: PT10M
+    window_duration: PT10M
+    criteria:
+      all_of:
+        - query: "AppExceptions | summarize ErrorCount = count() by bin(TimeGenerated, 10m) | where ErrorCount > 50"
+          time_aggregation: Count
+          threshold: 0
+          operator: GreaterThan
+          failing_periods:
+            min_failing_periods_to_alert: 1
+            number_of_evaluation_periods: 1
+    actions:
+      action_groups:
+        - ref:azure_action_groups.warning.id
+
+# ── Activity Log Alerts (control-plane events → Teams) ───────────────────────
+
+azure_activity_log_alerts:
+  resource-deleted:
+    resource_group_name: ref:azure_resource_groups.notify.resource_group_name
+    activity_log_alert_name: ala-resource-deleted-teams
+    description: Any resource deletion in the subscription → Teams #platform-info
+    enabled: true
+    scopes:
+      - /subscriptions/00000000-0000-0000-0000-000000000000
+    condition:
+      all_of:
+        - field: category
+          equals: Administrative
+        - field: operationName
+          contains_any:
+            - /delete
+        - field: status
+          equals: Succeeded
+    actions:
+      action_groups:
+        - action_group_id: ref:azure_action_groups.info.id
+
+  policy-denied:
+    resource_group_name: ref:azure_resource_groups.notify.resource_group_name
+    activity_log_alert_name: ala-policy-denied-teams
+    description: Azure Policy denied a deployment → Teams #sre-critical
+    enabled: true
+    scopes:
+      - /subscriptions/00000000-0000-0000-0000-000000000000
+    condition:
+      all_of:
+        - field: category
+          equals: Policy
+        - field: operationName
+          equals: Microsoft.Authorization/policies/deny/action
+    actions:
+      action_groups:
+        - action_group_id: ref:azure_action_groups.critical.id

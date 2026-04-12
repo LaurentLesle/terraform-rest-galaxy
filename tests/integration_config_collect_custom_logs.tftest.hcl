@@ -16,12 +16,17 @@ variable "access_token" {
   default   = "placeholder"
 }
 
+variable "subscription_id" {
+  type    = string
+  default = "00000000-0000-0000-0000-000000000000"
+}
+
 run "plan_collect_custom_logs" {
   command = plan
 
   variables {
     config_file     = "configurations/collect_custom_logs.yaml"
-    subscription_id = "00000000-0000-0000-0000-000000000000"
+    subscription_id = var.subscription_id
     tenant_id       = "00000000-0000-0000-0000-000000000000"
   }
 

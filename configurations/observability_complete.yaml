@@ -2,7 +2,6 @@ default_location: westeurope
 
 azure_resource_groups:
   obs-complete:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: rg-obs-complete
     location: westeurope
     tags:
@@ -11,7 +10,6 @@ azure_resource_groups:
 
 azure_monitor_workspaces:
   obs-complete:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.obs-complete.resource_group_name
     monitor_workspace_name: amw-obs-complete
     location: ref:azure_resource_groups.obs-complete.location
@@ -19,7 +17,6 @@ azure_monitor_workspaces:
 
 azure_log_analytics_workspaces:
   obs-complete:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.obs-complete.resource_group_name
     workspace_name: law-obs-complete
     location: ref:azure_resource_groups.obs-complete.location
@@ -29,7 +26,6 @@ azure_log_analytics_workspaces:
 
 azure_user_assigned_identities:
   grafana:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.obs-complete.resource_group_name
     identity_name: id-grafana-obs
     location: ref:azure_resource_groups.obs-complete.location
@@ -37,7 +33,6 @@ azure_user_assigned_identities:
 
 azure_managed_grafanas:
   obs-complete:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.obs-complete.resource_group_name
     grafana_name: grafana-obs-complete
     location: ref:azure_resource_groups.obs-complete.location
@@ -49,7 +44,6 @@ azure_managed_grafanas:
 
 azure_data_collection_endpoints:
   obs-complete:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.obs-complete.resource_group_name
     data_collection_endpoint_name: dce-obs-complete
     location: ref:azure_resource_groups.obs-complete.location
@@ -57,7 +51,6 @@ azure_data_collection_endpoints:
 
 azure_data_collection_rules:
   obs-complete:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.obs-complete.resource_group_name
     data_collection_rule_name: dcr-obs-complete
     location: ref:azure_resource_groups.obs-complete.location
@@ -75,7 +68,6 @@ azure_data_collection_rules:
 
 azure_application_insights:
   obs-complete:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.obs-complete.resource_group_name
     application_insights_name: appi-obs-complete
     location: ref:azure_resource_groups.obs-complete.location
@@ -89,7 +81,6 @@ azure_application_insights:
 
 azure_action_groups:
   platform-team:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.obs-complete.resource_group_name
     action_group_name: ag-platform-team
     short_name: platform
@@ -101,7 +92,6 @@ azure_action_groups:
     tags: ref:azure_resource_groups.obs-complete.tags
 
   sre-team:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.obs-complete.resource_group_name
     action_group_name: ag-sre-team
     short_name: sre
@@ -122,7 +112,6 @@ azure_action_groups:
 
 azure_metric_alerts:
   high-cpu:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.obs-complete.resource_group_name
     metric_alert_name: alert-high-cpu
     location: global
@@ -150,7 +139,6 @@ azure_metric_alerts:
     tags: ref:azure_resource_groups.obs-complete.tags
 
   high-memory:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.obs-complete.resource_group_name
     metric_alert_name: alert-high-memory
     location: global
@@ -179,7 +167,6 @@ azure_metric_alerts:
 
 azure_scheduled_query_rules:
   error-rate:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.obs-complete.resource_group_name
     rule_name: sqr-error-rate
     location: ref:azure_resource_groups.obs-complete.location
@@ -207,7 +194,6 @@ azure_scheduled_query_rules:
 
 azure_activity_log_alerts:
   resource-deletion:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.obs-complete.resource_group_name
     activity_log_alert_name: ala-resource-deletion
     location: global
@@ -229,7 +215,6 @@ azure_activity_log_alerts:
 
 azure_alert_processing_rules:
   business-hours-suppression:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.obs-complete.resource_group_name
     alert_processing_rule_name: apr-biz-hours-suppression
     location: ref:azure_resource_groups.obs-complete.location

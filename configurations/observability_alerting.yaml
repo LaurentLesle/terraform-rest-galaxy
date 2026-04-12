@@ -2,7 +2,6 @@ default_location: westeurope
 
 azure_resource_groups:
   obs-alerting:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: rg-obs-alerting
     location: westeurope
     tags:
@@ -11,7 +10,6 @@ azure_resource_groups:
 
 azure_log_analytics_workspaces:
   obs-alerting:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.obs-alerting.resource_group_name
     workspace_name: law-obs-alerting
     location: ref:azure_resource_groups.obs-alerting.location
@@ -21,7 +19,6 @@ azure_log_analytics_workspaces:
 
 azure_action_groups:
   ops-team:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.obs-alerting.resource_group_name
     action_group_name: ag-ops-team
     short_name: ops-team
@@ -37,7 +34,6 @@ azure_action_groups:
     tags: ref:azure_resource_groups.obs-alerting.tags
 
   critical:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.obs-alerting.resource_group_name
     action_group_name: ag-critical
     short_name: critical
@@ -54,7 +50,6 @@ azure_action_groups:
 
 azure_metric_alerts:
   high-cpu:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.obs-alerting.resource_group_name
     metric_alert_name: alert-high-cpu
     location: global
@@ -83,7 +78,6 @@ azure_metric_alerts:
 
 azure_scheduled_query_rules:
   failed-requests:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.obs-alerting.resource_group_name
     rule_name: sqr-failed-requests
     location: ref:azure_resource_groups.obs-alerting.location
@@ -111,7 +105,6 @@ azure_scheduled_query_rules:
 
 azure_activity_log_alerts:
   resource-deleted:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.obs-alerting.resource_group_name
     activity_log_alert_name: ala-resource-deleted
     location: global
@@ -136,7 +129,6 @@ azure_activity_log_alerts:
 
 azure_alert_processing_rules:
   maintenance-window:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.obs-alerting.resource_group_name
     alert_processing_rule_name: apr-maintenance-window
     location: ref:azure_resource_groups.obs-alerting.location

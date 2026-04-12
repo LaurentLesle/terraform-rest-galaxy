@@ -15,6 +15,11 @@ variable "access_token" {
   default   = "placeholder"
 }
 
+variable "subscription_id" {
+  type    = string
+  default = "00000000-0000-0000-0000-000000000000"
+}
+
 variable "graph_access_token" {
   type      = string
   sensitive = true
@@ -26,7 +31,7 @@ run "plan_observability_grafana_prometheus" {
 
   variables {
     config_file     = "configurations/observability_grafana_prometheus.yaml"
-    subscription_id = "00000000-0000-0000-0000-000000000000"
+    subscription_id = var.subscription_id
     tenant_id       = "00000000-0000-0000-0000-000000000000"
   }
 

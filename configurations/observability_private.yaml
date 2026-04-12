@@ -3,7 +3,6 @@
 # All monitoring services are locked to PrivateOnly access mode.
 # Grafana is deployed with publicNetworkAccess: Disabled and connected
 # to the VNet via a private endpoint.
-# subscription_id: 00000000-0000-0000-0000-000000000000
 
 terraform_backend:
   type: local
@@ -15,7 +14,6 @@ default_location: westeurope
 
 azure_resource_groups:
   obs-private:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: rg-observability-private
     location: westeurope
     tags:
@@ -26,7 +24,6 @@ azure_resource_groups:
 
 azure_virtual_networks:
   obs-private:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.obs-private.resource_group_name
     virtual_network_name: vnet-observability-private
     location: ref:azure_resource_groups.obs-private.location
@@ -42,7 +39,6 @@ azure_virtual_networks:
 
 azure_user_assigned_identities:
   grafana:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.obs-private.resource_group_name
     identity_name: id-grafana-private
     location: ref:azure_resource_groups.obs-private.location
@@ -52,7 +48,6 @@ azure_user_assigned_identities:
 
 azure_monitor_workspaces:
   obs-private:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.obs-private.resource_group_name
     monitor_workspace_name: amw-observability-private
     location: ref:azure_resource_groups.obs-private.location
@@ -62,7 +57,6 @@ azure_monitor_workspaces:
 
 azure_log_analytics_workspaces:
   obs-private:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.obs-private.resource_group_name
     workspace_name: law-observability-private
     location: ref:azure_resource_groups.obs-private.location
@@ -75,7 +69,6 @@ azure_log_analytics_workspaces:
 
 azure_managed_grafanas:
   obs-private:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.obs-private.resource_group_name
     grafana_name: grafana-observability-private
     location: ref:azure_resource_groups.obs-private.location
@@ -93,7 +86,6 @@ azure_managed_grafanas:
 
 azure_data_collection_endpoints:
   obs-private:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.obs-private.resource_group_name
     data_collection_endpoint_name: dce-observability-private
     location: ref:azure_resource_groups.obs-private.location
@@ -104,7 +96,6 @@ azure_data_collection_endpoints:
 
 azure_data_collection_rules:
   obs-private:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.obs-private.resource_group_name
     data_collection_rule_name: dcr-observability-private
     location: ref:azure_resource_groups.obs-private.location
@@ -141,7 +132,6 @@ azure_data_collection_rules:
 
 azure_monitor_private_link_scopes:
   obs-private:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.obs-private.resource_group_name
     scope_name: ampls-observability-private
     location: ref:azure_resource_groups.obs-private.location
@@ -154,13 +144,11 @@ azure_monitor_private_link_scopes:
 
 azure_monitor_private_link_scoped_resources:
   ampls-amw:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.obs-private.resource_group_name
     private_link_scope_name: ref:azure_monitor_private_link_scopes.obs-private.name
     scoped_resource_name: ampls-link-amw
     linked_resource_id: ref:azure_monitor_workspaces.obs-private.id
   ampls-dce:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.obs-private.resource_group_name
     private_link_scope_name: ref:azure_monitor_private_link_scopes.obs-private.name
     scoped_resource_name: ampls-link-dce
@@ -171,32 +159,26 @@ azure_monitor_private_link_scoped_resources:
 
 azure_private_dns_zones:
   monitor:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.obs-private.resource_group_name
     zone_name: privatelink.monitor.azure.com
     tags: ref:azure_resource_groups.obs-private.tags
   ods:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.obs-private.resource_group_name
     zone_name: privatelink.ods.opinsights.azure.com
     tags: ref:azure_resource_groups.obs-private.tags
   oms:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.obs-private.resource_group_name
     zone_name: privatelink.oms.opinsights.azure.com
     tags: ref:azure_resource_groups.obs-private.tags
   blob:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.obs-private.resource_group_name
     zone_name: privatelink.blob.core.windows.net
     tags: ref:azure_resource_groups.obs-private.tags
   agentsvc:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.obs-private.resource_group_name
     zone_name: privatelink.agentsvc.azure-automation.net
     tags: ref:azure_resource_groups.obs-private.tags
   grafana:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.obs-private.resource_group_name
     zone_name: privatelink.grafana.azure.com
     tags: ref:azure_resource_groups.obs-private.tags
@@ -206,7 +188,6 @@ azure_private_dns_zones:
 
 azure_private_dns_zone_virtual_network_links:
   monitor-link:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.obs-private.resource_group_name
     private_dns_zone_name: ref:azure_private_dns_zones.monitor.name
     virtual_network_link_name: link-vnet-to-monitor-dns
@@ -214,7 +195,6 @@ azure_private_dns_zone_virtual_network_links:
     registration_enabled: false
     tags: ref:azure_resource_groups.obs-private.tags
   ods-link:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.obs-private.resource_group_name
     private_dns_zone_name: ref:azure_private_dns_zones.ods.name
     virtual_network_link_name: link-vnet-to-ods-dns
@@ -222,7 +202,6 @@ azure_private_dns_zone_virtual_network_links:
     registration_enabled: false
     tags: ref:azure_resource_groups.obs-private.tags
   oms-link:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.obs-private.resource_group_name
     private_dns_zone_name: ref:azure_private_dns_zones.oms.name
     virtual_network_link_name: link-vnet-to-oms-dns
@@ -230,7 +209,6 @@ azure_private_dns_zone_virtual_network_links:
     registration_enabled: false
     tags: ref:azure_resource_groups.obs-private.tags
   blob-link:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.obs-private.resource_group_name
     private_dns_zone_name: ref:azure_private_dns_zones.blob.name
     virtual_network_link_name: link-vnet-to-blob-dns
@@ -238,7 +216,6 @@ azure_private_dns_zone_virtual_network_links:
     registration_enabled: false
     tags: ref:azure_resource_groups.obs-private.tags
   agentsvc-link:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.obs-private.resource_group_name
     private_dns_zone_name: ref:azure_private_dns_zones.agentsvc.name
     virtual_network_link_name: link-vnet-to-agentsvc-dns
@@ -246,7 +223,6 @@ azure_private_dns_zone_virtual_network_links:
     registration_enabled: false
     tags: ref:azure_resource_groups.obs-private.tags
   grafana-link:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.obs-private.resource_group_name
     private_dns_zone_name: ref:azure_private_dns_zones.grafana.name
     virtual_network_link_name: link-vnet-to-grafana-dns
@@ -258,7 +234,6 @@ azure_private_dns_zone_virtual_network_links:
 
 azure_private_endpoints:
   ampls:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.obs-private.resource_group_name
     private_endpoint_name: pe-ampls-observability-private
     location: ref:azure_resource_groups.obs-private.location
@@ -270,7 +245,6 @@ azure_private_endpoints:
     is_manual_connection: false
     tags: ref:azure_resource_groups.obs-private.tags
   grafana:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.obs-private.resource_group_name
     private_endpoint_name: pe-grafana-observability-private
     location: ref:azure_resource_groups.obs-private.location

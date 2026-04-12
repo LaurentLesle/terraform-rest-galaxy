@@ -3,7 +3,6 @@
 # Includes streamDeclarations for the JSON custom stream with typed columns.
 # transformKql parses JSON payloads into structured columns.
 # Destination: Log Analytics Workspace.
-# subscription_id: 00000000-0000-0000-0000-000000000000
 
 terraform_backend:
   type: local
@@ -13,7 +12,6 @@ default_location: westeurope
 
 azure_resource_groups:
   customlogs:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: rg-collect-custom-logs
     location: westeurope
     tags:
@@ -22,7 +20,6 @@ azure_resource_groups:
 
 azure_log_analytics_workspaces:
   customlogs:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.customlogs.resource_group_name
     workspace_name: law-collect-custom-logs
     location: ref:azure_resource_groups.customlogs.location
@@ -33,7 +30,6 @@ azure_log_analytics_workspaces:
 
 azure_data_collection_endpoints:
   customlogs:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.customlogs.resource_group_name
     data_collection_endpoint_name: dce-collect-custom-logs
     location: ref:azure_resource_groups.customlogs.location
@@ -42,7 +38,6 @@ azure_data_collection_endpoints:
 
 azure_data_collection_rules:
   customlogs:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.customlogs.resource_group_name
     data_collection_rule_name: dcr-collect-custom-logs
     location: ref:azure_resource_groups.customlogs.location

@@ -6,7 +6,6 @@ terraform_backend:
 
 azure_resource_groups:
   obs-basic:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: rg-observability-basic
     location: westeurope
     tags:
@@ -15,7 +14,6 @@ azure_resource_groups:
 
 azure_monitor_workspaces:
   obs-basic:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.obs-basic.resource_group_name
     monitor_workspace_name: amw-observability-basic
     location: ref:azure_resource_groups.obs-basic.location
@@ -23,7 +21,6 @@ azure_monitor_workspaces:
 
 azure_log_analytics_workspaces:
   obs-basic:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.obs-basic.resource_group_name
     workspace_name: law-observability-basic
     location: ref:azure_resource_groups.obs-basic.location
@@ -34,7 +31,6 @@ azure_log_analytics_workspaces:
 
 azure_data_collection_endpoints:
   obs-basic:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.obs-basic.resource_group_name
     data_collection_endpoint_name: dce-observability-basic
     location: ref:azure_resource_groups.obs-basic.location
@@ -43,7 +39,6 @@ azure_data_collection_endpoints:
 
 azure_data_collection_rules:
   obs-basic:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.obs-basic.resource_group_name
     data_collection_rule_name: dcr-observability-basic
     location: ref:azure_resource_groups.obs-basic.location

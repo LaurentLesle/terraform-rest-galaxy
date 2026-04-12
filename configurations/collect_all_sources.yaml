@@ -5,7 +5,6 @@
 #   dcr-syslog   : Linux syslog (auth+daemon errors) → LAW
 #   dcr-custom   : Custom JSON app logs + IIS logs → LAW
 # All DCRs share one resource group, one LAW, one AMW, and one DCE.
-# subscription_id: 00000000-0000-0000-0000-000000000000
 
 terraform_backend:
   type: local
@@ -15,7 +14,6 @@ default_location: westeurope
 
 azure_resource_groups:
   all:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: rg-collect-all-sources
     location: westeurope
     tags:
@@ -24,7 +22,6 @@ azure_resource_groups:
 
 azure_monitor_workspaces:
   all:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.all.resource_group_name
     monitor_workspace_name: amw-collect-all
     location: ref:azure_resource_groups.all.location
@@ -32,7 +29,6 @@ azure_monitor_workspaces:
 
 azure_log_analytics_workspaces:
   all:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.all.resource_group_name
     workspace_name: law-collect-all
     location: ref:azure_resource_groups.all.location
@@ -43,7 +39,6 @@ azure_log_analytics_workspaces:
 
 azure_data_collection_endpoints:
   all:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.all.resource_group_name
     data_collection_endpoint_name: dce-collect-all
     location: ref:azure_resource_groups.all.location
@@ -53,7 +48,6 @@ azure_data_collection_endpoints:
 azure_data_collection_rules:
   # DCR 1: Performance counters → AMW (Prometheus) + LAW (deep storage)
   perf:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.all.resource_group_name
     data_collection_rule_name: dcr-collect-all-perf
     location: ref:azure_resource_groups.all.location
@@ -92,7 +86,6 @@ azure_data_collection_rules:
 
   # DCR 2: Windows event logs — Application and System errors → LAW
   events:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.all.resource_group_name
     data_collection_rule_name: dcr-collect-all-events
     location: ref:azure_resource_groups.all.location
@@ -124,7 +117,6 @@ azure_data_collection_rules:
 
   # DCR 3: Linux syslog — auth and daemon facilities → LAW
   syslog:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.all.resource_group_name
     data_collection_rule_name: dcr-collect-all-syslog
     location: ref:azure_resource_groups.all.location
@@ -167,7 +159,6 @@ azure_data_collection_rules:
 
   # DCR 4: Custom JSON app logs + IIS logs → LAW
   custom:
-    subscription_id: "00000000-0000-0000-0000-000000000000"
     resource_group_name: ref:azure_resource_groups.all.resource_group_name
     data_collection_rule_name: dcr-collect-all-custom
     location: ref:azure_resource_groups.all.location
