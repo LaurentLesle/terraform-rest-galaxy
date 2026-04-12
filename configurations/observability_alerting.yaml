@@ -1,0 +1,156 @@
+default_location: westeurope
+
+azure_resource_groups:
+  obs-alerting:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: rg-obs-alerting
+    location: westeurope
+    tags:
+      environment: production
+      workload: observability
+
+azure_log_analytics_workspaces:
+  obs-alerting:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: ref:azure_resource_groups.obs-alerting.resource_group_name
+    workspace_name: law-obs-alerting
+    location: ref:azure_resource_groups.obs-alerting.location
+    sku_name: PerGB2018
+    retention_in_days: 90
+    tags: ref:azure_resource_groups.obs-alerting.tags
+
+azure_action_groups:
+  ops-team:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: ref:azure_resource_groups.obs-alerting.resource_group_name
+    action_group_name: ag-ops-team
+    short_name: ops-team
+    enabled: true
+    email_receivers:
+      - name: ops-email
+        email_address: ops@example.com
+        use_common_alert_schema: true
+    sms_receivers:
+      - name: ops-sms
+        country_code: "1"
+        phone_number: "5550100"
+    tags: ref:azure_resource_groups.obs-alerting.tags
+
+  critical:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: ref:azure_resource_groups.obs-alerting.resource_group_name
+    action_group_name: ag-critical
+    short_name: critical
+    enabled: true
+    webhook_receivers:
+      - name: critical-webhook
+        service_uri: https://hooks.example.com/critical
+        use_common_alert_schema: true
+    arm_role_receivers:
+      - name: monitoring-contributor
+        role_id: 749f88d5-cbae-40b8-bcfc-e573ddc772fa
+        use_common_alert_schema: true
+    tags: ref:azure_resource_groups.obs-alerting.tags
+
+azure_metric_alerts:
+  high-cpu:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: ref:azure_resource_groups.obs-alerting.resource_group_name
+    metric_alert_name: alert-high-cpu
+    location: global
+    severity: 2
+    enabled: true
+    scopes:
+      - /subscriptions/00000000-0000-0000-0000-000000000000
+    evaluation_frequency: PT5M
+    window_size: PT5M
+    target_resource_type: Microsoft.Compute/virtualMachines
+    target_resource_region: westeurope
+    criteria:
+      odata.type: Microsoft.Azure.Monitor.MultipleResourceMultipleMetricCriteria
+      allOf:
+        - name: high-cpu-criterion
+          metricName: Percentage CPU
+          metricNamespace: Microsoft.Compute/virtualMachines
+          operator: GreaterThan
+          threshold: 90
+          timeAggregation: Average
+          criterionType: StaticThresholdCriterion
+    actions:
+      - action_group_id: ref:azure_action_groups.ops-team.id
+    auto_mitigate: true
+    tags: ref:azure_resource_groups.obs-alerting.tags
+
+azure_scheduled_query_rules:
+  failed-requests:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: ref:azure_resource_groups.obs-alerting.resource_group_name
+    rule_name: sqr-failed-requests
+    location: ref:azure_resource_groups.obs-alerting.location
+    kind: LogAlert
+    severity: 1
+    enabled: true
+    scopes:
+      - ref:azure_log_analytics_workspaces.obs-alerting.id
+    evaluation_frequency: PT15M
+    window_size: PT15M
+    criteria:
+      all_of:
+        - query: "requests | where success == false | summarize failedRequests = count() by bin(timestamp, 15m)"
+          time_aggregation: Count
+          operator: GreaterThan
+          threshold: 5
+          failing_periods:
+            number_of_evaluation_periods: 1
+            min_failing_periods_to_alert: 1
+    actions:
+      action_groups:
+        - ref:azure_action_groups.ops-team.id
+    auto_mitigate: true
+    tags: ref:azure_resource_groups.obs-alerting.tags
+
+azure_activity_log_alerts:
+  resource-deleted:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: ref:azure_resource_groups.obs-alerting.resource_group_name
+    activity_log_alert_name: ala-resource-deleted
+    location: global
+    enabled: true
+    scopes:
+      - /subscriptions/00000000-0000-0000-0000-000000000000
+    condition:
+      all_of:
+        - field: category
+          equals: Administrative
+        - field: level
+          equals: Error
+        - field: operationName
+          contains_any:
+            - Microsoft.Resources/deployments/delete
+            - delete/action
+    actions:
+      action_groups:
+        - action_group_id: ref:azure_action_groups.critical.id
+    description: Alert when any resource is deleted in the subscription
+    tags: ref:azure_resource_groups.obs-alerting.tags
+
+azure_alert_processing_rules:
+  maintenance-window:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: ref:azure_resource_groups.obs-alerting.resource_group_name
+    alert_processing_rule_name: apr-maintenance-window
+    location: ref:azure_resource_groups.obs-alerting.location
+    enabled: true
+    scopes:
+      - /subscriptions/00000000-0000-0000-0000-000000000000
+    actions:
+      - action_type: RemoveAllActionGroups
+    schedule:
+      time_zone: UTC
+      recurrences:
+        - recurrence_type: Weekly
+          days_of_week:
+            - Saturday
+            - Sunday
+    description: Suppress all alerts on weekends for planned maintenance
+    tags: ref:azure_resource_groups.obs-alerting.tags

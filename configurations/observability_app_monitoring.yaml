@@ -1,0 +1,146 @@
+default_location: westeurope
+
+azure_resource_groups:
+  obs-app:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: rg-obs-app
+    location: westeurope
+    tags:
+      environment: production
+      workload: app-monitoring
+
+azure_log_analytics_workspaces:
+  obs-app:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: ref:azure_resource_groups.obs-app.resource_group_name
+    workspace_name: law-obs-app
+    location: ref:azure_resource_groups.obs-app.location
+    sku_name: PerGB2018
+    retention_in_days: 90
+    tags: ref:azure_resource_groups.obs-app.tags
+
+azure_application_insights:
+  obs-app:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: ref:azure_resource_groups.obs-app.resource_group_name
+    application_insights_name: appi-obs-app
+    location: ref:azure_resource_groups.obs-app.location
+    kind: web
+    application_type: web
+    workspace_resource_id: ref:azure_log_analytics_workspaces.obs-app.id
+    ingestion_mode: LogAnalytics
+    retention_in_days: 90
+    disable_local_auth: true
+    public_network_access_for_ingestion: Enabled
+    public_network_access_for_query: Enabled
+    tags: ref:azure_resource_groups.obs-app.tags
+
+azure_action_groups:
+  app-team:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: ref:azure_resource_groups.obs-app.resource_group_name
+    action_group_name: ag-app-team
+    short_name: app-team
+    enabled: true
+    email_receivers:
+      - name: app-email
+        email_address: app-team@example.com
+        use_common_alert_schema: true
+    webhook_receivers:
+      - name: app-webhook
+        service_uri: https://hooks.example.com/app-alerts
+        use_common_alert_schema: true
+    tags: ref:azure_resource_groups.obs-app.tags
+
+azure_diagnostic_settings:
+  appi-diag:
+    resource_id: ref:azure_application_insights.obs-app.id
+    diagnostic_setting_name: appi-obs-app-to-law
+    log_analytics_workspace_id: ref:azure_log_analytics_workspaces.obs-app.id
+    logs:
+      - category_group: allLogs
+        enabled: true
+    metrics:
+      - category: AllMetrics
+        enabled: true
+
+azure_metric_alerts:
+  high-server-exceptions:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: ref:azure_resource_groups.obs-app.resource_group_name
+    metric_alert_name: alert-high-server-exceptions
+    location: global
+    severity: 1
+    enabled: true
+    scopes:
+      - ref:azure_application_insights.obs-app.id
+    evaluation_frequency: PT5M
+    window_size: PT5M
+    criteria:
+      odata.type: Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria
+      allOf:
+        - name: server-exceptions
+          metricName: exceptions/server
+          metricNamespace: microsoft.insights/components
+          operator: GreaterThan
+          threshold: 5
+          timeAggregation: Count
+          criterionType: StaticThresholdCriterion
+    actions:
+      - action_group_id: ref:azure_action_groups.app-team.id
+    auto_mitigate: true
+    tags: ref:azure_resource_groups.obs-app.tags
+
+  slow-response:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: ref:azure_resource_groups.obs-app.resource_group_name
+    metric_alert_name: alert-slow-response
+    location: global
+    severity: 2
+    enabled: true
+    scopes:
+      - ref:azure_application_insights.obs-app.id
+    evaluation_frequency: PT5M
+    window_size: PT5M
+    criteria:
+      odata.type: Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria
+      allOf:
+        - name: response-time
+          metricName: requests/duration
+          metricNamespace: microsoft.insights/components
+          operator: GreaterThan
+          threshold: 2000
+          timeAggregation: Average
+          criterionType: StaticThresholdCriterion
+    actions:
+      - action_group_id: ref:azure_action_groups.app-team.id
+    auto_mitigate: true
+    tags: ref:azure_resource_groups.obs-app.tags
+
+azure_scheduled_query_rules:
+  failed-dependencies:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: ref:azure_resource_groups.obs-app.resource_group_name
+    rule_name: sqr-failed-dependencies
+    location: ref:azure_resource_groups.obs-app.location
+    kind: LogAlert
+    severity: 2
+    enabled: true
+    scopes:
+      - ref:azure_log_analytics_workspaces.obs-app.id
+    evaluation_frequency: PT15M
+    window_size: PT15M
+    criteria:
+      all_of:
+        - query: "dependencies | where success == false | summarize failedDeps = count() by bin(timestamp, 15m)"
+          time_aggregation: Count
+          operator: GreaterThan
+          threshold: 10
+          failing_periods:
+            number_of_evaluation_periods: 1
+            min_failing_periods_to_alert: 1
+    actions:
+      action_groups:
+        - ref:azure_action_groups.app-team.id
+    auto_mitigate: true
+    tags: ref:azure_resource_groups.obs-app.tags
