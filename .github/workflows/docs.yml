@@ -43,6 +43,9 @@ jobs:
           output-method: replace
           git-push: "false"
 
+      - name: Fix file ownership after Docker action
+        run: sudo chown -R $(id -u):$(id -g) .
+
       - name: Commit and push if changed
         # Only push on non-fork PRs and direct pushes to main — fork PRs have no write access
         if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository

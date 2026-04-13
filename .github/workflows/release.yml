@@ -324,6 +324,9 @@ jobs:
           output-method: replace
           git-push: "false"
 
+      - name: Fix file ownership after Docker action
+        run: sudo chown -R $(id -u):$(id -g) .
+
       - name: Commit and push docs if changed
         env:
           TAG_NAME: ${{ github.ref_name }}
