@@ -61,7 +61,7 @@ module "github_repositories" {
 
   organization           = each.value.organization
   name                   = each.value.name
-  check_existance        = try(each.value.check_existance, false)
+  check_existance        = try(each.value.check_existance, var.github_check_existance)
   description            = try(each.value.description, null)
   homepage               = try(each.value.homepage, null)
   visibility             = try(each.value.visibility, "private")

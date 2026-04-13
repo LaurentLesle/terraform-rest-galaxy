@@ -7,6 +7,7 @@ variable "github_environment_variables" {
     environment_name = string
     name             = string
     value            = string
+    check_existance  = optional(bool, null)
   }))
   description = <<-EOT
     Map of GitHub Actions variables scoped to a specific deployment environment.
@@ -57,4 +58,5 @@ module "github_environment_variables" {
   environment_name = each.value.environment_name
   name             = each.value.name
   value            = each.value.value
+  check_existance  = try(each.value.check_existance, var.github_check_existance)
 }

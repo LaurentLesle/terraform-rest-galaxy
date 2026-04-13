@@ -7,6 +7,7 @@ variable "github_environment_secrets" {
     environment_name = string
     secret_name      = string
     plaintext_value  = string
+    check_existance  = optional(bool, null)
   }))
   description = <<-EOT
     Map of GitHub Actions secrets scoped to a specific deployment environment.
@@ -57,4 +58,5 @@ module "github_environment_secrets" {
   environment_name = each.value.environment_name
   secret_name      = each.value.secret_name
   plaintext_value  = each.value.plaintext_value
+  check_existance  = try(each.value.check_existance, var.github_check_existance)
 }
