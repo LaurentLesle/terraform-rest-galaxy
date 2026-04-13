@@ -2,10 +2,11 @@
 
 variable "github_repository_action_variables" {
   type = map(object({
-    owner = string
-    repo  = string
-    name  = string
-    value = string
+    owner           = string
+    repo            = string
+    name            = string
+    value           = string
+    check_existance = optional(bool, null)
   }))
   description = <<-EOT
     Map of GitHub Actions repository variables to create via the GitHub REST API.
@@ -49,8 +50,9 @@ module "github_repository_action_variables" {
     module.github_repositories,
   ]
 
-  owner = each.value.owner
-  repo  = each.value.repo
-  name  = each.value.name
-  value = each.value.value
+  owner           = each.value.owner
+  repo            = each.value.repo
+  name            = each.value.name
+  value           = each.value.value
+  check_existance = try(each.value.check_existance, var.github_check_existance)
 }
