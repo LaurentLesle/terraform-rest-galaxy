@@ -1,0 +1,1586 @@
+# ── Landing Zone Governance ─────────────────────────────────────────────────
+# ci:requires-live-token
+# (externals.entraid_groups and externals.azure_role_definitions require live
+#  ARM/Graph API calls at plan time to resolve group object IDs and role IDs)
+#
+# Demonstrates the full governance stack:
+#   - Management group hierarchy (ALZ reference architecture)
+#   - RBAC at management group scope — Entra groups wired via ref:externals
+#   - Custom policy definitions at management group scope
+#   - Custom initiative combining custom + built-in policies
+#   - Policy assignments mixing custom and built-in (via externals) definitions
+#
+# Authentication:
+#   export TF_VAR_access_token=$(az account get-access-token --resource https://management.azure.com --query accessToken -o tsv)
+#   export TF_VAR_subscription_id=$(az account show --query id -o tsv)
+#   ./tf.sh apply configurations/governance_landing_zone.yaml
+#
+# Notes:
+#   - Built-in policy/initiative IDs are under externals.policy_definitions / policy_set_definitions.
+#   - Built-in role definition names are under externals.azure_role_definitions (resolved at plan time).
+#   - Entra group object IDs are under externals.entraid_groups — replace placeholders with real GUIDs.
+#   - No ARM IDs or GUIDs are hardcoded in resource blocks — all cross-references use ref:.
+# ─────────────────────────────────────────────────────────────────────────────
+
+default_location: westeurope
+
+# ── External references (built-in policies and initiatives, not managed here) ─
+# Declare well-known built-in policies/initiatives so they can be referenced
+# via ref:externals.policy_definitions.<key>.id and
+# ref:externals.policy_set_definitions.<key>.id in any resource below.
+externals:
+  # ── Platform subscription IDs (replace with real GUIDs before deploying) ─────
+  # Reference with: ref:externals.azure_subscriptions.<key>.id
+  azure_subscriptions:
+    platform_management:
+      id: "00000000-0000-0000-0000-000000000001"
+      # Replace with the actual Platform Management subscription GUID.
+      # Obtain it with: az account list --query "[?name=='Platform Management'].id" -o tsv
+
+  # ── Built-in role definitions (static ARM paths — GUIDs are globally stable) ─
+  # Reference with: ref:externals.azure_role_definitions.<key>.id
+  azure_role_definitions:
+    owner:
+      id: /providers/Microsoft.Authorization/roleDefinitions/8e3af657-a8ff-443c-a75c-2fe8c4bcb635
+    contributor:
+      id: /providers/Microsoft.Authorization/roleDefinitions/b24988ac-6180-42a0-ab88-20f7382dd24c
+    reader:
+      id: /providers/Microsoft.Authorization/roleDefinitions/acdd72a7-3385-48ef-bd42-f606fba81ae7
+    network_contributor:
+      id: /providers/Microsoft.Authorization/roleDefinitions/4d97b98b-1d4f-4787-a291-c67834d212e7
+    security_reader:
+      id: /providers/Microsoft.Authorization/roleDefinitions/39bc4728-0917-49c7-9d2c-d95423bc2eb4
+    security_admin:
+      id: /providers/Microsoft.Authorization/roleDefinitions/fb1c8493-542b-48eb-b624-b4c8fea62acd
+    management_group_contributor:
+      id: /providers/Microsoft.Authorization/roleDefinitions/5d58bcaf-24a5-4b20-bdb6-eed9f69fbe4c
+    management_group_reader:
+      id: /providers/Microsoft.Authorization/roleDefinitions/fd500307-89d7-4fc5-b91a-5ba3a41e50db9
+    billing_reader:
+      id: /providers/Microsoft.Authorization/roleDefinitions/fa23ad8b-c56e-40d8-ac0c-ce449e1d2c64
+    cost_management_reader:
+      id: /providers/Microsoft.Authorization/roleDefinitions/72fafb9e-0641-4937-9268-a91bfd8191a3
+
+
+  policy_definitions:
+    require_tags:
+      id: /providers/Microsoft.Authorization/policyDefinitions/871b6d14-10aa-478d-b590-94f262ecfa99
+      display_name: "Require a tag on resources"
+    allowed_locations:
+      id: /providers/Microsoft.Authorization/policyDefinitions/e56962a6-4747-49cd-b67b-bf8b01975c4c
+      display_name: "Allowed locations"
+    deny_public_ip:
+      id: /providers/Microsoft.Authorization/policyDefinitions/83a86a26-fd1f-447c-b59d-e51f44264114
+      display_name: "Network interfaces should not have public IPs"
+    allowed_vm_skus:
+      id: /providers/Microsoft.Authorization/policyDefinitions/cccc23c7-8427-4f53-ad12-b6a63eb452b3
+      display_name: "Allowed virtual machine size SKUs"
+    secure_transfer_storage:
+      id: /providers/Microsoft.Authorization/policyDefinitions/404c3081-a854-4457-ae30-26a93ef643f9
+      display_name: "Secure transfer to storage accounts should be enabled"
+    kv_firewall:
+      id: /providers/Microsoft.Authorization/policyDefinitions/55615ac9-af46-4a59-874e-391cc3dfb490
+      display_name: "Azure Key Vault should have firewall enabled or public network access disabled"
+    nsg_subnet:
+      id: /providers/Microsoft.Authorization/policyDefinitions/e71308d3-144b-4262-b144-efdc3cc90517
+      display_name: "Subnets should be associated with a Network Security Group"
+    # ── Defender for Cloud — configure (DINE) policies ───────────────────────
+    mdc_configure_servers:
+      id: /providers/Microsoft.Authorization/policyDefinitions/5eb6d64a-4086-4d7a-92da-ec51aed0332d
+      display_name: "Configure Microsoft Defender for Servers plan"
+    mdc_configure_storage:
+      id: /providers/Microsoft.Authorization/policyDefinitions/cfdc5972-75b3-4418-8ae1-7f5c36839390
+      display_name: "Configure Microsoft Defender for Storage to be enabled"
+    mdc_configure_containers:
+      id: /providers/Microsoft.Authorization/policyDefinitions/efd4031d-b232-4595-babf-ae817348e91b
+      display_name: "Configure Microsoft Defender for Containers plan"
+    mdc_configure_cspm:
+      id: /providers/Microsoft.Authorization/policyDefinitions/72f8cee7-2937-403d-84a1-a4e3e57f3c21
+      display_name: "Configure Microsoft Defender CSPM plan"
+    mdc_configure_keyvault:
+      id: /providers/Microsoft.Authorization/policyDefinitions/1f725891-01c0-420a-9059-4fa46cb770b7
+      display_name: "Configure Microsoft Defender for Key Vault plan"
+    mdc_configure_appservice:
+      id: /providers/Microsoft.Authorization/policyDefinitions/b40e7bcd-a1e5-47fe-b9cf-2f534d0bfb7d
+      display_name: "Configure Azure Defender for App Service to be enabled"
+    mdc_configure_sql_azure:
+      id: /providers/Microsoft.Authorization/policyDefinitions/b99b73e7-074b-4089-9395-b7236f094491
+      display_name: "Configure Azure Defender for Azure SQL database to be enabled"
+    mdc_configure_sql_machines:
+      id: /providers/Microsoft.Authorization/policyDefinitions/50ea7265-7d8c-429e-9a7d-ca1f410191c3
+      display_name: "Configure Azure Defender for SQL servers on machines to be enabled"
+    mdc_configure_arm:
+      id: /providers/Microsoft.Authorization/policyDefinitions/b7021b2b-08fd-4dc0-9de7-3c6ece09faf9
+      display_name: "Configure Azure Defender for Resource Manager to be enabled"
+    mdc_configure_oss_db:
+      id: /providers/Microsoft.Authorization/policyDefinitions/44433aa3-7ec2-4002-93ea-65c65ff0310a
+      display_name: "Configure Azure Defender for open-source relational databases to be enabled"
+    mdc_configure_cosmos_db:
+      id: /providers/Microsoft.Authorization/policyDefinitions/82bf5b87-728b-4a74-ba4d-6123845cf542
+      display_name: "Configure Microsoft Defender for Azure Cosmos DB to be enabled"
+    # ── Defender for Cloud — audit policies ──────────────────────────────────
+    mdc_audit_servers:
+      id: /providers/Microsoft.Authorization/policyDefinitions/4da35fc9-c9e7-4960-aec9-797fe7d9051d
+      display_name: "Azure Defender for servers should be enabled"
+    mdc_audit_storage:
+      id: /providers/Microsoft.Authorization/policyDefinitions/640d2586-54d2-465f-877f-9ffc1d2109f4
+      display_name: "Microsoft Defender for Storage should be enabled"
+    mdc_audit_containers:
+      id: /providers/Microsoft.Authorization/policyDefinitions/1c988dd6-ade4-430f-a608-2a3e5b0a6d38
+      display_name: "Microsoft Defender for Containers should be enabled"
+    mdc_audit_keyvault:
+      id: /providers/Microsoft.Authorization/policyDefinitions/0e6763cc-5078-4e64-889d-ff4d9a839047
+      display_name: "Azure Defender for Key Vault should be enabled"
+    mdc_audit_appservice:
+      id: /providers/Microsoft.Authorization/policyDefinitions/2913021d-f2fd-4f3d-b958-22354e2bdbcb
+      display_name: "Azure Defender for App Service should be enabled"
+    mdc_audit_sql_azure:
+      id: /providers/Microsoft.Authorization/policyDefinitions/7fe3b40f-802b-4cdd-8bd4-fd799c948cc2
+      display_name: "Azure Defender for Azure SQL Database servers should be enabled"
+    mdc_audit_arm:
+      id: /providers/Microsoft.Authorization/policyDefinitions/c3d20c29-b36d-48fe-808b-99a87530ad99
+      display_name: "Azure Defender for Resource Manager should be enabled"
+    mdc_audit_cspm:
+      id: /providers/Microsoft.Authorization/policyDefinitions/1f90fc71-a595-4066-8974-d4d0802e8ef0
+      display_name: "Microsoft Defender CSPM should be enabled"
+    mdc_security_contact:
+      id: /providers/Microsoft.Authorization/policyDefinitions/4f4f78b8-e367-4b10-a341-d9a4ad5cf1c7
+      display_name: "Subscriptions should have a contact email address for security issues"
+    mdc_email_alert:
+      id: /providers/Microsoft.Authorization/policyDefinitions/6e2593d9-add6-4083-9c9b-4b7d2188c899
+      display_name: "Email notification for high severity alerts should be enabled"
+    mdc_email_owner:
+      id: /providers/Microsoft.Authorization/policyDefinitions/0b15565f-aa9e-48ba-8619-45960f2c314d
+      display_name: "Email notification to subscription owner for high severity alerts should be enabled"
+    # ── Pillar 1: Data protection & encryption ────────────────────────────────
+    deny_public_network_storage:
+      id: /providers/Microsoft.Authorization/policyDefinitions/b2982f36-99f2-4db5-8eff-283140c09693
+      display_name: "Storage accounts should disable public network access"
+    deny_public_network_sql:
+      id: /providers/Microsoft.Authorization/policyDefinitions/1b8ca024-1d5c-4dec-8995-b1a932b41780
+      display_name: "Public network access on Azure SQL Database should be disabled"
+    deny_public_network_keyvault:
+      id: /providers/Microsoft.Authorization/policyDefinitions/405c5871-3e91-4644-8a63-58e19d68ff5b
+      display_name: "Azure Key Vault should disable public network access"
+    deny_public_network_cosmosdb:
+      id: /providers/Microsoft.Authorization/policyDefinitions/797b37f7-06b8-444c-b1ad-fc62867f335a
+      display_name: "Azure Cosmos DB should disable public network access"
+    storage_private_link:
+      id: /providers/Microsoft.Authorization/policyDefinitions/6edd7eda-6dd8-40f7-810d-67160c639cd9
+      display_name: "Storage accounts should use private link"
+    sql_private_endpoint:
+      id: /providers/Microsoft.Authorization/policyDefinitions/7698e800-9299-47a6-b3b6-5a0fee576eed
+      display_name: "Private endpoint connections on Azure SQL Database should be enabled"
+    keyvault_private_link:
+      id: /providers/Microsoft.Authorization/policyDefinitions/a6abeaec-4d90-4a02-805f-6b26c4d3fbe9
+      display_name: "Azure Key Vaults should use private link"
+    appservice_https_only:
+      id: /providers/Microsoft.Authorization/policyDefinitions/a4af4a39-4135-47fb-b175-47fbdf85311d
+      display_name: "App Service apps should only be accessible over HTTPS"
+    appservice_latest_tls:
+      id: /providers/Microsoft.Authorization/policyDefinitions/f0e6e85b-9b9f-4a4b-b67b-f730d42f1b0b
+      display_name: "App Service apps should use the latest TLS version"
+    sql_tls_1_2:
+      id: /providers/Microsoft.Authorization/policyDefinitions/32e6bbec-16b6-44c2-be37-c5b672d103cf
+      display_name: "Azure SQL Database should be running TLS version 1.2 or newer"
+    vm_disk_encryption_windows:
+      id: /providers/Microsoft.Authorization/policyDefinitions/3dc5edcd-002d-444c-b216-e123bbfa37c0
+      display_name: "Windows virtual machines should enable Azure Disk Encryption or EncryptionAtHost"
+    vm_disk_encryption_linux:
+      id: /providers/Microsoft.Authorization/policyDefinitions/ca88aadc-6e2b-416c-9de2-5a0f01d1693f
+      display_name: "Linux virtual machines should enable Azure Disk Encryption or EncryptionAtHost"
+    keyvault_purge_protection:
+      id: /providers/Microsoft.Authorization/policyDefinitions/0b60c0b2-2dc2-4e1c-b5c9-abbed971de53
+      display_name: "Key vaults should have deletion protection enabled"
+    keyvault_soft_delete:
+      id: /providers/Microsoft.Authorization/policyDefinitions/1e66c121-a66a-4b1f-9b83-0fd99bf0fc2d
+      display_name: "Key vaults should have soft delete enabled"
+    # ── Pillar 2: Logging & monitoring ────────────────────────────────────────
+    diag_storage_log_analytics:
+      id: /providers/Microsoft.Authorization/policyDefinitions/59759c62-9a22-4cdf-ae64-074495983fef
+      display_name: "Configure diagnostic settings for Storage Accounts to Log Analytics workspace"
+    diag_keyvault_log_analytics:
+      id: /providers/Microsoft.Authorization/policyDefinitions/bef3f64c-5290-43b7-85b0-9b254eef4c47
+      display_name: "Deploy Diagnostic Settings for Key Vault to Log Analytics workspace"
+    diag_sql_log_analytics:
+      id: /providers/Microsoft.Authorization/policyDefinitions/6567d3f3-42d0-4cfb-9606-9741ba60fa07
+      display_name: "Enable logging by category group for SQL databases to Log Analytics"
+    audit_diagnostic_setting:
+      id: /providers/Microsoft.Authorization/policyDefinitions/7f89b1eb-583c-429a-8828-af049802c1d9
+      display_name: "Audit diagnostic setting for selected resource types"
+    activity_log_retention:
+      id: /providers/Microsoft.Authorization/policyDefinitions/b02aacc0-b073-424e-8298-42b22829ee0a
+      display_name: "Activity log should be retained for at least one year"
+    configure_ama_linux:
+      id: /providers/Microsoft.Authorization/policyDefinitions/a4034bc6-ae50-406d-bf76-50f4ee5a7811
+      display_name: "Configure Linux virtual machines to run Azure Monitor Agent with system-assigned managed identity"
+    configure_ama_windows:
+      id: /providers/Microsoft.Authorization/policyDefinitions/ca817e41-e85a-4783-bc7f-dc532d36235e
+      display_name: "Configure Windows virtual machines to run Azure Monitor Agent using system-assigned managed identity"
+    # ── Pillar 3: Business continuity & backup ────────────────────────────────
+    backup_vm_audit:
+      id: /providers/Microsoft.Authorization/policyDefinitions/013e242c-8828-4970-87b3-ab247555486d
+      display_name: "Azure Backup should be enabled for Virtual Machines"
+    backup_vm_dine:
+      id: /providers/Microsoft.Authorization/policyDefinitions/98d0b9f8-fd90-49c9-88e2-d3baf3b0dd86
+      display_name: "Configure backup on virtual machines without a given tag to a new recovery services vault with a default policy"
+    # ── Pillar 4: Patch & vulnerability management ────────────────────────────
+    update_manager_periodic_audit:
+      id: /providers/Microsoft.Authorization/policyDefinitions/bd876905-5b84-4f73-ab2d-2e7a7c4568d9
+      display_name: "Machines should be configured to periodically check for missing system updates"
+    update_manager_periodic_dine:
+      id: /providers/Microsoft.Authorization/policyDefinitions/59efceea-0c96-497e-a4a1-4eb2290dac15
+      display_name: "Configure periodic checking for missing system updates on azure virtual machines"
+    system_updates_installed:
+      id: /providers/Microsoft.Authorization/policyDefinitions/f85bf3e0-d513-442e-89c3-1784ad63382b
+      display_name: "System updates should be installed on your machines (powered by Update Center)"
+    # ── Pillar 5: Identity hardening ──────────────────────────────────────────
+    max_3_owners:
+      id: /providers/Microsoft.Authorization/policyDefinitions/4f11b553-d42e-4e3a-89be-32ca364cad4c
+      display_name: "A maximum of 3 owners should be designated for your subscription"
+    blocked_accounts:
+      id: /providers/Microsoft.Authorization/policyDefinitions/8d7e1fde-fe26-4b5f-8108-f8e432cbc2be
+      display_name: "Blocked accounts with read and write permissions on Azure resources should be removed"
+    guest_accounts_owner:
+      id: /providers/Microsoft.Authorization/policyDefinitions/339353f6-2387-4a45-abe4-7f529d121046
+      display_name: "Guest accounts with owner permissions on Azure resources should be removed"
+    # ── Arc-enabled Servers ───────────────────────────────────────────────────
+    configure_linux_arc_ama:
+      id: /providers/Microsoft.Authorization/policyDefinitions/845857af-0333-4c5d-bbbc-6076697da122
+      display_name: "Configure Linux Arc-enabled machines to run Azure Monitor Agent"
+    configure_windows_arc_ama:
+      id: /providers/Microsoft.Authorization/policyDefinitions/94f686d6-9a24-4e19-91f1-de937dc171a4
+      display_name: "Configure Windows Arc-enabled machines to run Azure Monitor Agent"
+    configure_arc_periodic_update:
+      id: /providers/Microsoft.Authorization/policyDefinitions/bfea026e-043f-4ff4-9d1b-bf301ca7ff46
+      display_name: "Configure periodic checking for missing system updates on Azure Arc-enabled servers"
+    configure_defender_servers_arc:
+      id: /providers/Microsoft.Authorization/policyDefinitions/1b8c0040-b224-4ea1-be6a-47254dd5a207
+      display_name: "Configure Azure Defender for Servers to be enabled (with P1 subplan) for all resources"
+    linux_arc_security_baseline:
+      id: /providers/Microsoft.Authorization/policyDefinitions/fc9b3da7-8347-4380-8e70-0a0361d8dedd
+      display_name: "Linux machines should meet requirements for the Azure compute security baseline"
+    windows_arc_security_baseline:
+      id: /providers/Microsoft.Authorization/policyDefinitions/72650e9f-97bc-4b2a-ab5f-9781a9fcecbc
+      display_name: "Windows machines should meet requirements of the Azure compute security baseline"
+    arc_deny_legacy_mma_linux:
+      id: /providers/Microsoft.Authorization/policyDefinitions/bd58d393-162c-4134-bcd6-a6a5484a37a1
+      display_name: "The legacy Log Analytics extension should not be installed on Azure Arc enabled Linux servers"
+    arc_deny_legacy_mma_windows:
+      id: /providers/Microsoft.Authorization/policyDefinitions/df441472-4dae-4e4e-87b9-9205ba46be16
+      display_name: "The legacy Log Analytics extension should not be installed on Azure Arc enabled Windows servers"
+    # ── Arc-enabled Kubernetes ────────────────────────────────────────────────
+    configure_arc_k8s_policy_addon:
+      id: /providers/Microsoft.Authorization/policyDefinitions/0adc5395-9169-4b9b-8687-af838d69410a
+      display_name: "Configure Azure Arc enabled Kubernetes clusters to install the Azure Policy extension"
+    arc_k8s_policy_addon_audit:
+      id: /providers/Microsoft.Authorization/policyDefinitions/6b2122c1-8120-4ff5-801b-17625a355590
+      display_name: "Azure Arc enabled Kubernetes clusters should have the Azure Policy extension installed"
+    arc_k8s_defender_audit:
+      id: /providers/Microsoft.Authorization/policyDefinitions/8dfab9c4-fe7b-49ad-85e4-1e9be085358f
+      display_name: "[Preview]: Azure Arc enabled Kubernetes clusters should have Microsoft Defender for Cloud extension installed"
+    configure_flux_extension:
+      id: /providers/Microsoft.Authorization/policyDefinitions/f9175d5f-abc8-1dc3-bd3c-5d7476ada3d1
+      display_name: "Configure installation of Flux extension on Kubernetes cluster"
+    k8s_no_privileged_containers:
+      id: /providers/Microsoft.Authorization/policyDefinitions/95edb821-ddaf-4404-9732-666045e056b4
+      display_name: "Kubernetes cluster should not allow privileged containers"
+    k8s_no_cap_sys_admin:
+      id: /providers/Microsoft.Authorization/policyDefinitions/d2e7ea85-6b44-4317-a0be-1b951587f626
+      display_name: "Kubernetes clusters should not grant CAP_SYS_ADMIN security capabilities"
+    k8s_no_host_namespace_sharing:
+      id: /providers/Microsoft.Authorization/policyDefinitions/47a1ee2f-2a2a-4576-bf2a-e0e36709c2b8
+      display_name: "Kubernetes cluster containers should not share host namespaces"
+    k8s_allowed_images:
+      id: /providers/Microsoft.Authorization/policyDefinitions/febd0533-8e55-448f-b837-bd0e06f16469
+      display_name: "Kubernetes cluster containers should only use allowed images"
+    k8s_allowed_apparmor_profiles:
+      id: /providers/Microsoft.Authorization/policyDefinitions/511f5417-5d12-434d-ab2e-816901e72a5e
+      display_name: "Kubernetes cluster containers should only use allowed AppArmor profiles"
+    k8s_no_external_ips:
+      id: /providers/Microsoft.Authorization/policyDefinitions/d46c275d-1680-448d-b2ec-e495a3b6cc89
+      display_name: "Kubernetes cluster services should only use allowed external IPs"
+    k8s_approved_host_network_ports:
+      id: /providers/Microsoft.Authorization/policyDefinitions/82985f06-dc18-4a48-bc1c-b9f4f0098cfe
+      display_name: "Kubernetes cluster pods should only use approved host network and port list"
+    k8s_container_resource_limits:
+      id: /providers/Microsoft.Authorization/policyDefinitions/e345eecc-fa47-480f-9e88-67dcc122b164
+      display_name: "Kubernetes cluster containers CPU and memory resource limits should not exceed the specified limits"
+    # ── Pillar 6: Tag inheritance (Modify effect — tagName parameter required) ─
+    inherit_tag_from_rg:
+      id: /providers/Microsoft.Authorization/policyDefinitions/ea3f2387-9b95-492a-a190-fcdc54f7b070
+      display_name: "Inherit a tag from the resource group if missing"
+    inherit_tag_from_subscription:
+      id: /providers/Microsoft.Authorization/policyDefinitions/40df99da-1232-49b1-a39a-6da8d878f469
+      display_name: "Inherit a tag from the subscription if missing"
+  policy_set_definitions:
+    cis_benchmark:
+      id: /providers/Microsoft.Authorization/policySetDefinitions/06f19060-9e68-4070-92ca-f15cc126059e
+      display_name: "CIS Microsoft Azure Foundations Benchmark v2.0.0"
+    mcsb:
+      id: /providers/Microsoft.Authorization/policySetDefinitions/1f3afdf9-d0c9-4c3d-847f-89da613e70a8
+      display_name: "Microsoft Cloud Security Benchmark"
+    soc2_type2:
+      id: /providers/Microsoft.Authorization/policySetDefinitions/4054785f-702b-4a98-9215-009cbd58b141
+      display_name: "SOC 2 Type 2"
+    mdc_configure_plans:
+      id: /providers/Microsoft.Authorization/policySetDefinitions/f08c57cd-dbd6-49a4-a85e-9ae77ac959b0
+      display_name: "Configure Microsoft Defender for Cloud plans"
+    # ── Regulatory compliance frameworks ──────────────────────────────────────
+    iso_27001:
+      id: /providers/Microsoft.Authorization/policySetDefinitions/89c6cddc-1c73-4ac1-b19c-54d1a15a42f2
+      display_name: "ISO 27001:2013"
+    nist_800_53_r5:
+      id: /providers/Microsoft.Authorization/policySetDefinitions/179d1daa-458f-4e47-8086-2a68d0d6c38f
+      display_name: "NIST SP 800-53 Rev. 5"
+    pci_dss_v4:
+      id: /providers/Microsoft.Authorization/policySetDefinitions/c676748e-3af9-4e22-bc28-50feed564afb
+      display_name: "PCI DSS v4"
+    nist_800_171_r2:
+      id: /providers/Microsoft.Authorization/policySetDefinitions/03055927-78bd-4236-86c0-f36125a10dc9
+      display_name: "NIST SP 800-171 Rev. 2"
+    fedramp_high:
+      id: /providers/Microsoft.Authorization/policySetDefinitions/d5264498-16f4-418a-b659-fa7ef418175f
+      display_name: "FedRAMP High"
+    hipaa_hitrust:
+      id: /providers/Microsoft.Authorization/policySetDefinitions/a169a624-5599-4385-a696-c8d643089fab
+      display_name: "HITRUST/HIPAA"
+
+# ── Management Group Hierarchy ────────────────────────────────────────────────
+# parent_id uses explicit ARM paths — management groups resolve at L0 and cannot
+# self-reference via ref: at that layer. The ARM path is deterministic and known
+# without an API call: /providers/Microsoft.Management/managementGroups/{id}.
+# Use externals.azure_management_groups to reference pre-existing groups.
+azure_management_groups:
+  mg_root:
+    display_name: "Contoso Root"
+    # parent_id omitted — placed under tenant root group
+
+  mg_platform:
+    display_name: "Platform"
+    parent_id: /providers/Microsoft.Management/managementGroups/mg_root
+
+  mg_platform_management:
+    display_name: "Management"
+    parent_id: /providers/Microsoft.Management/managementGroups/mg_platform
+
+  mg_platform_connectivity:
+    display_name: "Connectivity"
+    parent_id: /providers/Microsoft.Management/managementGroups/mg_platform
+
+  mg_platform_identity:
+    display_name: "Identity"
+    parent_id: /providers/Microsoft.Management/managementGroups/mg_platform
+
+  mg_landing_zones:
+    display_name: "Landing Zones"
+    parent_id: /providers/Microsoft.Management/managementGroups/mg_root
+
+  mg_corp:
+    display_name: "Corp"
+    parent_id: /providers/Microsoft.Management/managementGroups/mg_landing_zones
+
+  mg_online:
+    display_name: "Online"
+    parent_id: /providers/Microsoft.Management/managementGroups/mg_landing_zones
+
+  mg_sandbox:
+    display_name: "Sandbox"
+    parent_id: /providers/Microsoft.Management/managementGroups/mg_root
+
+  mg_decommissioned:
+    display_name: "Decommissioned"
+    parent_id: /providers/Microsoft.Management/managementGroups/mg_root
+
+# ── Entra ID Security Groups (ALZ reference taxonomy) ────────────────────────
+# Groups are created via Microsoft Graph API (rest.graph provider alias).
+# group.id is server-assigned — available after apply, referenced via ref:entraid_groups.<key>.id
+# is_assignable_to_role = true enables PIM-eligible Azure RBAC assignments (requires Entra P2).
+# Naming follows ALZ accelerator convention: grp-<scope>-<function>.
+entraid_groups:
+  # ── Platform — cross-subscription ownership ──────────────────────────────
+  grp_platform_owners:
+    display_name:            "grp-alz-platform-owners"
+    mail_nickname:           "grp-alz-platform-owners"
+    security_enabled:        true
+    mail_enabled:            false
+    is_assignable_to_role:   true
+    description:             "ALZ Platform Owners — Owner on Platform management group. Manages platform subscriptions (Management, Connectivity, Identity)."
+
+  grp_management_admins:
+    display_name:            "grp-alz-management-admins"
+    mail_nickname:           "grp-alz-management-admins"
+    security_enabled:        true
+    mail_enabled:            false
+    is_assignable_to_role:   true
+    description:             "ALZ Management Admins — Contributor on Management MG. Operates Log Analytics, Automation, and monitoring infrastructure."
+
+  grp_connectivity_admins:
+    display_name:            "grp-alz-connectivity-admins"
+    mail_nickname:           "grp-alz-connectivity-admins"
+    security_enabled:        true
+    mail_enabled:            false
+    is_assignable_to_role:   true
+    description:             "ALZ Connectivity Admins — Network Contributor on Connectivity MG. Manages hub VNets, VPN/ExpressRoute, firewalls, and DNS."
+
+  grp_identity_admins:
+    display_name:            "grp-alz-identity-admins"
+    mail_nickname:           "grp-alz-identity-admins"
+    security_enabled:        true
+    mail_enabled:            false
+    is_assignable_to_role:   true
+    description:             "ALZ Identity Admins — Contributor on Identity MG. Manages AD DS / ADFS infrastructure and key vaults for identity workloads."
+
+  # ── Landing Zones — workload teams ────────────────────────────────────────
+  grp_lz_owners:
+    display_name:            "grp-alz-landingzone-owners"
+    mail_nickname:           "grp-alz-landingzone-owners"
+    security_enabled:        true
+    mail_enabled:            false
+    is_assignable_to_role:   true
+    description:             "ALZ Landing Zone Owners — Contributor at Landing Zones MG. Delegates subscription vending and workload onboarding."
+
+  grp_corp_contributors:
+    display_name:            "grp-alz-corp-workload-owners"
+    mail_nickname:           "grp-alz-corp-workload-owners"
+    security_enabled:        true
+    mail_enabled:            false
+    is_assignable_to_role:   true
+    description:             "ALZ Corp Workload Owners — Contributor on Corp MG. Manages private/hybrid connected workloads."
+
+  grp_online_contributors:
+    display_name:            "grp-alz-online-workload-owners"
+    mail_nickname:           "grp-alz-online-workload-owners"
+    security_enabled:        true
+    mail_enabled:            false
+    is_assignable_to_role:   true
+    description:             "ALZ Online Workload Owners — Contributor on Online MG. Manages internet-facing workloads without corp network connectivity."
+
+  grp_sandbox_contributors:
+    display_name:            "grp-alz-sandbox-contributors"
+    mail_nickname:           "grp-alz-sandbox-contributors"
+    security_enabled:        true
+    mail_enabled:            false
+    is_assignable_to_role:   false
+    description:             "ALZ Sandbox Contributors — Contributor on Sandbox MG. Self-service experimentation; no prod access."
+
+  # ── Cross-cutting — security, compliance, FinOps ─────────────────────────
+  grp_security_ops:
+    display_name:            "grp-alz-security-operations"
+    mail_nickname:           "grp-alz-security-operations"
+    security_enabled:        true
+    mail_enabled:            false
+    is_assignable_to_role:   true
+    description:             "ALZ Security Operations — Security Reader + Security Admin at tenant root. Monitors compliance and manages security alerts."
+
+  grp_cost_management:
+    display_name:            "grp-alz-cost-management"
+    mail_nickname:           "grp-alz-cost-management"
+    security_enabled:        true
+    mail_enabled:            false
+    is_assignable_to_role:   false
+    description:             "ALZ FinOps / Cost Management — Cost Management Reader at tenant root. Reviews billing, budgets, and cost allocation."
+
+  grp_global_readers:
+    display_name:            "grp-alz-global-readers"
+    mail_nickname:           "grp-alz-global-readers"
+    security_enabled:        true
+    mail_enabled:            false
+    is_assignable_to_role:   true
+    description:             "ALZ Global Readers — Reader at tenant root. Audit, compliance, and cross-team visibility with no write access."
+
+# ── Platform Management infrastructure ───────────────────────────────────────
+# Central Log Analytics workspace deployed in the Platform/Management subscription.
+# All DINE diagnostic policies send logs here.
+# Update externals.azure_subscriptions.platform_management.id before deploying.
+
+azure_resource_groups:
+  rg_platform_management:
+    subscription_id:     ref:externals.azure_subscriptions.platform_management.id
+    resource_group_name: rg-platform-management
+    tags:
+      environment: production
+      cost-center:  platform
+      owner:        platform-team
+
+azure_log_analytics_workspaces:
+  law_platform:
+    resource_group_name: ref:azure_resource_groups.rg_platform_management.name
+    subscription_id:     ref:externals.azure_subscriptions.platform_management.id
+    workspace_name:      law-platform
+    retention_in_days:   90
+    sku_name:            PerGB2018
+    features_disable_local_auth: true
+    tags:
+      environment: production
+      cost-center:  platform
+      owner:        platform-team
+
+# ── Custom Policy Definitions ─────────────────────────────────────────────────
+# Defined at the root management group scope — visible to all child groups.
+azure_policy_definitions:
+  deny_unapproved_regions:
+    scope: ref:azure_management_groups.mg_root.id
+    display_name: "Deny resources outside approved regions"
+    mode: Indexed
+    metadata:
+      category: "Location"
+      version: "1.0.0"
+    parameters:
+      allowedLocations:
+        type: Array
+        metadata:
+          displayName: "Allowed locations"
+          description: "List of Azure regions where resources are permitted."
+        defaultValue: ["westeurope", "northeurope"]
+    policy_rule:
+      if:
+        not:
+          field: "location"
+          in: "[parameters('allowedLocations')]"
+      then:
+        effect: Deny
+
+  require_environment_tag:
+    scope: ref:azure_management_groups.mg_root.id
+    display_name: "Require 'environment' tag on all resources"
+    mode: Indexed
+    metadata:
+      category: "Tags"
+      version: "1.0.0"
+    policy_rule:
+      if:
+        field: "tags['environment']"
+        exists: "false"
+      then:
+        effect: Deny
+
+  require_owner_tag:
+    scope: ref:azure_management_groups.mg_root.id
+    display_name: "Require 'owner' tag on all resources"
+    mode: Indexed
+    metadata:
+      category: "Tags"
+      version: "1.0.0"
+    policy_rule:
+      if:
+        field: "tags['owner']"
+        exists: "false"
+      then:
+        effect: Deny
+
+  deny_public_subnets:
+    scope: ref:azure_management_groups.mg_landing_zones.id
+    display_name: "Deny subnets without NSG in landing zones"
+    mode: All
+    metadata:
+      category: "Network"
+      version: "1.0.0"
+    policy_rule:
+      if:
+        allOf:
+          - field: "type"
+            equals: "Microsoft.Network/virtualNetworks/subnets"
+          - field: "Microsoft.Network/virtualNetworks/subnets/networkSecurityGroup.id"
+            exists: "false"
+          - not:
+              field: "name"
+              in: ["GatewaySubnet", "AzureFirewallSubnet", "AzureBastionSubnet", "RouteServerSubnet"]
+      then:
+        effect: Deny
+
+# ── Custom Initiatives (Policy Set Definitions) ───────────────────────────────
+azure_policy_set_definitions:
+  lz_tagging_baseline:
+    scope: ref:azure_management_groups.mg_root.id
+    display_name: "Landing Zone Tagging Baseline"
+    metadata:
+      category: "Tags"
+      version: "1.0.0"
+    description: "Enforces mandatory tagging standards across all landing zone resources."
+    policy_definition_groups:
+      - name: "mandatory-tags"
+        display_name: "Mandatory Tags"
+    policy_definitions:
+      - policy_definition_id: ref:azure_policy_definitions.require_environment_tag.id
+        policy_definition_reference_id: require_environment_tag
+        group_names: ["mandatory-tags"]
+      - policy_definition_id: ref:azure_policy_definitions.require_owner_tag.id
+        policy_definition_reference_id: require_owner_tag
+        group_names: ["mandatory-tags"]
+      - policy_definition_id: ref:externals.policy_definitions.require_tags.id
+        policy_definition_reference_id: require_cost_center_tag
+        group_names: ["mandatory-tags"]
+        parameters:
+          tagName: { value: "cost-center" }
+
+  lz_network_baseline:
+    scope: ref:azure_management_groups.mg_landing_zones.id
+    display_name: "Landing Zone Network Security Baseline"
+    metadata:
+      category: "Network"
+      version: "1.0.0"
+    description: "Network security guardrails for all landing zone subscriptions."
+    policy_definitions:
+      - policy_definition_id: ref:azure_policy_definitions.deny_public_subnets.id
+        policy_definition_reference_id: deny_public_subnets
+      - policy_definition_id: ref:externals.policy_definitions.deny_public_ip.id
+        policy_definition_reference_id: deny_public_ip_builtin
+
+# ── Policy Assignments ────────────────────────────────────────────────────────
+azure_policy_assignments:
+
+  # ── Microsoft Defender for Cloud — root management group ───────────────────
+  # The DINE bundle initiative is the primary mechanism: one assignment deploys
+  # all Defender plans to every subscription in the hierarchy via remediation tasks.
+  # Individual DINE assignments below override specific plan configurations
+  # (P2 for Servers, all extensions for CSPM/Containers, malware scan for Storage).
+
+  root_mdc_configure_plans:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_set_definitions.mdc_configure_plans.id
+    display_name: "Enable all Microsoft Defender for Cloud plans (root)"
+    enforcement_mode: Default
+    non_compliance_messages:
+      - message: "Microsoft Defender for Cloud plans must be enabled on all subscriptions."
+
+  root_mdc_configure_servers_p2:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.mdc_configure_servers.id
+    display_name: "MDC — Configure Defender for Servers (P2) (root)"
+    enforcement_mode: Default
+    parameters:
+      subPlan:
+        value: P2
+
+  root_mdc_configure_storage:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.mdc_configure_storage.id
+    display_name: "MDC — Configure Defender for Storage with malware scanning (root)"
+    enforcement_mode: Default
+
+  root_mdc_configure_containers:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.mdc_configure_containers.id
+    display_name: "MDC — Configure Defender for Containers with all extensions (root)"
+    enforcement_mode: Default
+
+  root_mdc_configure_cspm:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.mdc_configure_cspm.id
+    display_name: "MDC — Configure Defender CSPM with all extensions (root)"
+    enforcement_mode: Default
+
+  root_mdc_configure_keyvault:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.mdc_configure_keyvault.id
+    display_name: "MDC — Configure Defender for Key Vault (root)"
+    enforcement_mode: Default
+
+  root_mdc_configure_appservice:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.mdc_configure_appservice.id
+    display_name: "MDC — Configure Defender for App Service (root)"
+    enforcement_mode: Default
+
+  root_mdc_configure_sql_azure:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.mdc_configure_sql_azure.id
+    display_name: "MDC — Configure Defender for Azure SQL (root)"
+    enforcement_mode: Default
+
+  root_mdc_configure_sql_machines:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.mdc_configure_sql_machines.id
+    display_name: "MDC — Configure Defender for SQL on machines (root)"
+    enforcement_mode: Default
+
+  root_mdc_configure_arm:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.mdc_configure_arm.id
+    display_name: "MDC — Configure Defender for Resource Manager (root)"
+    enforcement_mode: Default
+
+  root_mdc_configure_oss_db:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.mdc_configure_oss_db.id
+    display_name: "MDC — Configure Defender for open-source relational databases (root)"
+    enforcement_mode: Default
+
+  root_mdc_configure_cosmos_db:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.mdc_configure_cosmos_db.id
+    display_name: "MDC — Configure Defender for Cosmos DB (root)"
+    enforcement_mode: Default
+
+  # ── Microsoft Defender for Cloud — audit / compliance visibility ────────────
+  # AuditIfNotExists assignments feed the MDC compliance dashboard.
+  # enforcement_mode: Default causes non-compliant resources to appear in the dashboard.
+
+  root_mdc_audit_servers:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.mdc_audit_servers.id
+    display_name: "MDC Audit — Defender for Servers should be enabled (root)"
+    enforcement_mode: Default
+
+  root_mdc_audit_storage:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.mdc_audit_storage.id
+    display_name: "MDC Audit — Defender for Storage should be enabled (root)"
+    enforcement_mode: Default
+
+  root_mdc_audit_containers:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.mdc_audit_containers.id
+    display_name: "MDC Audit — Defender for Containers should be enabled (root)"
+    enforcement_mode: Default
+
+  root_mdc_audit_keyvault:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.mdc_audit_keyvault.id
+    display_name: "MDC Audit — Defender for Key Vault should be enabled (root)"
+    enforcement_mode: Default
+
+  root_mdc_audit_appservice:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.mdc_audit_appservice.id
+    display_name: "MDC Audit — Defender for App Service should be enabled (root)"
+    enforcement_mode: Default
+
+  root_mdc_audit_sql_azure:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.mdc_audit_sql_azure.id
+    display_name: "MDC Audit — Defender for Azure SQL should be enabled (root)"
+    enforcement_mode: Default
+
+  root_mdc_audit_arm:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.mdc_audit_arm.id
+    display_name: "MDC Audit — Defender for Resource Manager should be enabled (root)"
+    enforcement_mode: Default
+
+  root_mdc_audit_cspm:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.mdc_audit_cspm.id
+    display_name: "MDC Audit — Defender CSPM should be enabled (root)"
+    enforcement_mode: Default
+
+  root_mdc_security_contact:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.mdc_security_contact.id
+    display_name: "MDC Audit — Security contact email should be set (root)"
+    enforcement_mode: Default
+
+  root_mdc_email_alert:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.mdc_email_alert.id
+    display_name: "MDC Audit — Email notification for high severity alerts (root)"
+    enforcement_mode: Default
+
+  root_mdc_email_owner:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.mdc_email_owner.id
+    display_name: "MDC Audit — Email notification to subscription owner (root)"
+    enforcement_mode: Default
+
+  # ── Pillar 1: Data protection & encryption — root MG ──────────────────────
+  # Deny public network access across PaaS services. These policies support
+  # both Audit and Deny effects — setting enforcement_mode: Default enforces
+  # the Deny effect where the policy default allows it.
+
+  root_deny_public_storage:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.deny_public_network_storage.id
+    display_name: "Deny public network access — Storage (root)"
+    enforcement_mode: Default
+    parameters:
+      effect:
+        value: Deny
+    non_compliance_messages:
+      - message: "Storage accounts must disable public network access."
+
+  root_deny_public_sql:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.deny_public_network_sql.id
+    display_name: "Deny public network access — Azure SQL (root)"
+    enforcement_mode: Default
+    parameters:
+      effect:
+        value: Deny
+    non_compliance_messages:
+      - message: "Azure SQL Databases must disable public network access."
+
+  root_deny_public_keyvault:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.deny_public_network_keyvault.id
+    display_name: "Deny public network access — Key Vault (root)"
+    enforcement_mode: Default
+    parameters:
+      effect:
+        value: Deny
+    non_compliance_messages:
+      - message: "Key Vaults must disable public network access."
+
+  root_deny_public_cosmosdb:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.deny_public_network_cosmosdb.id
+    display_name: "Deny public network access — Cosmos DB (root)"
+    enforcement_mode: Default
+    parameters:
+      effect:
+        value: Deny
+    non_compliance_messages:
+      - message: "Cosmos DB accounts must disable public network access."
+
+  root_storage_private_link:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.storage_private_link.id
+    display_name: "Storage accounts should use private link (root)"
+    enforcement_mode: Default
+
+  root_sql_private_endpoint:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.sql_private_endpoint.id
+    display_name: "Azure SQL Database should use private endpoint (root)"
+    enforcement_mode: Default
+
+  root_keyvault_private_link:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.keyvault_private_link.id
+    display_name: "Key Vaults should use private link (root)"
+    enforcement_mode: Default
+
+  root_appservice_https_only:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.appservice_https_only.id
+    display_name: "App Service apps — HTTPS only (root)"
+    enforcement_mode: Default
+    parameters:
+      effect:
+        value: Deny
+    non_compliance_messages:
+      - message: "App Service apps must only be accessible over HTTPS."
+
+  root_appservice_latest_tls:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.appservice_latest_tls.id
+    display_name: "App Service apps — latest TLS version (root)"
+    enforcement_mode: Default
+
+  root_sql_tls_1_2:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.sql_tls_1_2.id
+    display_name: "Azure SQL Database — TLS 1.2 or newer (root)"
+    enforcement_mode: Default
+    parameters:
+      effect:
+        value: Deny
+    non_compliance_messages:
+      - message: "Azure SQL Databases must use TLS version 1.2 or newer."
+
+  root_vm_disk_encryption_windows:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.vm_disk_encryption_windows.id
+    display_name: "Windows VMs — Azure Disk Encryption or EncryptionAtHost (root)"
+    enforcement_mode: Default
+    non_compliance_messages:
+      - message: "Windows VMs must have Azure Disk Encryption or EncryptionAtHost enabled."
+
+  root_vm_disk_encryption_linux:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.vm_disk_encryption_linux.id
+    display_name: "Linux VMs — Azure Disk Encryption or EncryptionAtHost (root)"
+    enforcement_mode: Default
+    non_compliance_messages:
+      - message: "Linux VMs must have Azure Disk Encryption or EncryptionAtHost enabled."
+
+  root_keyvault_purge_protection:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.keyvault_purge_protection.id
+    display_name: "Key Vaults — deletion protection required (root)"
+    enforcement_mode: Default
+    parameters:
+      effect:
+        value: Deny
+    non_compliance_messages:
+      - message: "Key Vaults must have purge protection and soft delete enabled."
+
+  root_keyvault_soft_delete:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.keyvault_soft_delete.id
+    display_name: "Key Vaults — soft delete required (root)"
+    enforcement_mode: Default
+    parameters:
+      effect:
+        value: Deny
+
+  # ── Pillar 2: Logging & monitoring — root MG ───────────────────────────────
+  # DINE policies deploy diagnostic settings and AMA to all resources.
+  # The central Log Analytics workspace (law_platform) is provisioned above and
+  # referenced via ref: so the ARM path is resolved at plan time from the managed resource.
+
+  root_diag_storage_log_analytics:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.diag_storage_log_analytics.id
+    display_name: "Configure Storage diagnostic settings to Log Analytics (root)"
+    enforcement_mode: Default
+    parameters:
+      logAnalytics:
+        value: ref:azure_log_analytics_workspaces.law_platform.id
+
+  root_diag_keyvault_log_analytics:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.diag_keyvault_log_analytics.id
+    display_name: "Configure Key Vault diagnostic settings to Log Analytics (root)"
+    enforcement_mode: Default
+    parameters:
+      logAnalytics:
+        value: ref:azure_log_analytics_workspaces.law_platform.id
+
+  root_diag_sql_log_analytics:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.diag_sql_log_analytics.id
+    display_name: "Configure SQL Database diagnostic settings to Log Analytics (root)"
+    enforcement_mode: Default
+    parameters:
+      logAnalytics:
+        value: ref:azure_log_analytics_workspaces.law_platform.id
+
+  root_audit_diagnostic_setting:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.audit_diagnostic_setting.id
+    display_name: "Audit diagnostic settings on selected resource types (root)"
+    enforcement_mode: Default
+
+  root_activity_log_retention:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.activity_log_retention.id
+    display_name: "Activity log retention — at least 1 year (root)"
+    enforcement_mode: Default
+    non_compliance_messages:
+      - message: "Activity logs must be retained for at least one year."
+
+  root_configure_ama_linux:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.configure_ama_linux.id
+    display_name: "Configure Azure Monitor Agent on Linux VMs (root)"
+    enforcement_mode: Default
+
+  root_configure_ama_windows:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.configure_ama_windows.id
+    display_name: "Configure Azure Monitor Agent on Windows VMs (root)"
+    enforcement_mode: Default
+
+  # ── Pillar 3: Business continuity & backup — landing zones ─────────────────
+
+  lz_backup_vm_audit:
+    scope: ref:azure_management_groups.mg_landing_zones.id
+    policy_definition_id: ref:externals.policy_definitions.backup_vm_audit.id
+    display_name: "Azure Backup should be enabled for VMs (landing zones)"
+    enforcement_mode: Default
+    non_compliance_messages:
+      - message: "Virtual machines must have Azure Backup enabled."
+
+  lz_backup_vm_dine:
+    scope: ref:azure_management_groups.mg_landing_zones.id
+    policy_definition_id: ref:externals.policy_definitions.backup_vm_dine.id
+    display_name: "Configure Backup for VMs to new Recovery Services Vault (landing zones)"
+    enforcement_mode: Default
+
+  # ── Pillar 4: Patch & vulnerability management — root MG ──────────────────
+
+  root_update_manager_periodic_audit:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.update_manager_periodic_audit.id
+    display_name: "Machines should check for missing updates periodically (root)"
+    enforcement_mode: Default
+    non_compliance_messages:
+      - message: "Machines must be configured for periodic system update assessment."
+
+  root_update_manager_periodic_dine:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.update_manager_periodic_dine.id
+    display_name: "Configure periodic update check on Azure VMs (root)"
+    enforcement_mode: Default
+
+  root_system_updates_installed:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.system_updates_installed.id
+    display_name: "System updates should be installed on machines (root)"
+    enforcement_mode: Default
+    non_compliance_messages:
+      - message: "All machines must have system updates installed."
+
+  # ── Pillar 5: Identity hardening — root MG ────────────────────────────────
+
+  root_max_3_owners:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.max_3_owners.id
+    display_name: "Maximum 3 owners per subscription (root)"
+    enforcement_mode: Default
+    non_compliance_messages:
+      - message: "Subscriptions must not have more than 3 owner-level accounts."
+
+  root_blocked_accounts:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.blocked_accounts.id
+    display_name: "Blocked accounts with permissions should be removed (root)"
+    enforcement_mode: Default
+    non_compliance_messages:
+      - message: "Blocked (disabled) accounts with read/write permissions must be removed."
+
+  root_guest_accounts_owner:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.guest_accounts_owner.id
+    display_name: "Guest accounts with owner permissions should be removed (root)"
+    enforcement_mode: Default
+    non_compliance_messages:
+      - message: "Guest accounts must not have owner permissions on Azure resources."
+
+  # ── Pillar 6: Tag inheritance — root MG ───────────────────────────────────
+  # Modify-effect policies propagate tags from resource group to child resources.
+  # One assignment per tag name required.
+
+  root_inherit_environment_tag:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.inherit_tag_from_rg.id
+    display_name: "Inherit 'environment' tag from resource group if missing (root)"
+    enforcement_mode: Default
+    parameters:
+      tagName:
+        value: "environment"
+
+  root_inherit_cost_center_tag:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.inherit_tag_from_rg.id
+    display_name: "Inherit 'cost-center' tag from resource group if missing (root)"
+    enforcement_mode: Default
+    parameters:
+      tagName:
+        value: "cost-center"
+
+  root_inherit_owner_tag:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.inherit_tag_from_rg.id
+    display_name: "Inherit 'owner' tag from resource group if missing (root)"
+    enforcement_mode: Default
+    parameters:
+      tagName:
+        value: "owner"
+
+  # ── Arc-enabled Servers — root MG ─────────────────────────────────────────
+  # Policies targeting Microsoft.HybridCompute/machines apply to all Arc servers
+  # onboarded under any subscription in the hierarchy.
+
+  root_configure_linux_arc_ama:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.configure_linux_arc_ama.id
+    display_name: "Configure Azure Monitor Agent on Linux Arc servers (root)"
+    enforcement_mode: Default
+
+  root_configure_windows_arc_ama:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.configure_windows_arc_ama.id
+    display_name: "Configure Azure Monitor Agent on Windows Arc servers (root)"
+    enforcement_mode: Default
+
+  root_configure_arc_periodic_update:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.configure_arc_periodic_update.id
+    display_name: "Configure periodic update assessment on Arc servers (root)"
+    enforcement_mode: Default
+
+  root_configure_defender_servers_arc:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.configure_defender_servers_arc.id
+    display_name: "Enable Defender for Servers on Arc machines (root)"
+    enforcement_mode: Default
+
+  root_linux_arc_security_baseline:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.linux_arc_security_baseline.id
+    display_name: "Linux Arc machines — Azure compute security baseline (root)"
+    enforcement_mode: Default
+    parameters:
+      IncludeArcMachines:
+        value: "true"
+    non_compliance_messages:
+      - message: "Linux Arc machines must meet the Azure compute security baseline requirements."
+
+  root_windows_arc_security_baseline:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.windows_arc_security_baseline.id
+    display_name: "Windows Arc machines — Azure compute security baseline (root)"
+    enforcement_mode: Default
+    parameters:
+      IncludeArcMachines:
+        value: "true"
+    non_compliance_messages:
+      - message: "Windows Arc machines must meet the Azure compute security baseline requirements."
+
+  root_arc_deny_legacy_mma_linux:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.arc_deny_legacy_mma_linux.id
+    display_name: "Deny legacy Log Analytics extension on Linux Arc servers (root)"
+    enforcement_mode: Default
+    non_compliance_messages:
+      - message: "Remove the legacy MMA/Log Analytics agent from Arc Linux servers — use Azure Monitor Agent instead."
+
+  root_arc_deny_legacy_mma_windows:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.arc_deny_legacy_mma_windows.id
+    display_name: "Deny legacy Log Analytics extension on Windows Arc servers (root)"
+    enforcement_mode: Default
+    non_compliance_messages:
+      - message: "Remove the legacy MMA/Log Analytics agent from Arc Windows servers — use Azure Monitor Agent instead."
+
+  # ── Arc-enabled Kubernetes — root MG ──────────────────────────────────────
+  # Microsoft.Kubernetes/connectedClusters policies apply to all Arc-connected
+  # clusters. Pod Security policies use mode: Microsoft.Kubernetes.Data and
+  # are enforced via the Azure Policy add-on installed on the cluster.
+
+  root_configure_arc_k8s_policy_addon:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.configure_arc_k8s_policy_addon.id
+    display_name: "Install Azure Policy add-on on Arc Kubernetes clusters (root)"
+    enforcement_mode: Default
+
+  root_arc_k8s_policy_addon_audit:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.arc_k8s_policy_addon_audit.id
+    display_name: "Arc Kubernetes clusters should have Azure Policy add-on (root)"
+    enforcement_mode: Default
+    non_compliance_messages:
+      - message: "Arc Kubernetes clusters must have the Azure Policy extension installed."
+
+  root_arc_k8s_defender_audit:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.arc_k8s_defender_audit.id
+    display_name: "Arc Kubernetes clusters should have Defender for Cloud extension (root)"
+    enforcement_mode: Default
+    non_compliance_messages:
+      - message: "Arc Kubernetes clusters must have the Microsoft Defender for Cloud extension installed."
+
+  root_configure_flux_extension:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.configure_flux_extension.id
+    display_name: "Install Flux GitOps extension on Arc Kubernetes clusters (root)"
+    enforcement_mode: Default
+
+  root_k8s_no_privileged_containers:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.k8s_no_privileged_containers.id
+    display_name: "Kubernetes — no privileged containers (root)"
+    enforcement_mode: Default
+    non_compliance_messages:
+      - message: "Kubernetes pods must not run privileged containers."
+
+  root_k8s_no_cap_sys_admin:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.k8s_no_cap_sys_admin.id
+    display_name: "Kubernetes — no CAP_SYS_ADMIN capability (root)"
+    enforcement_mode: Default
+    non_compliance_messages:
+      - message: "Kubernetes containers must not be granted CAP_SYS_ADMIN."
+
+  root_k8s_no_host_namespace_sharing:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.k8s_no_host_namespace_sharing.id
+    display_name: "Kubernetes — no shared host namespaces (PID/IPC/Network) (root)"
+    enforcement_mode: Default
+    non_compliance_messages:
+      - message: "Kubernetes containers must not share host PID, IPC, or network namespaces."
+
+  root_k8s_allowed_images:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.k8s_allowed_images.id
+    display_name: "Kubernetes — only allowed container images (root)"
+    # DoNotEnforce until allowedContainerImagesRegex is set to match your registries.
+    # Example: "^<acr_name>\\.azurecr\\.io/.+" for Azure Container Registry
+    enforcement_mode: DoNotEnforce
+    parameters:
+      allowedContainerImagesRegex:
+        value: "^.+\\.azurecr\\.io/.+"
+    non_compliance_messages:
+      - message: "Kubernetes containers must only use images from approved Azure Container Registries."
+
+  root_k8s_allowed_apparmor_profiles:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.k8s_allowed_apparmor_profiles.id
+    display_name: "Kubernetes — allowed AppArmor profiles only (root)"
+    enforcement_mode: Default
+    parameters:
+      allowedProfiles:
+        value: ["runtime/default", "localhost/*"]
+
+  root_k8s_no_external_ips:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.k8s_no_external_ips.id
+    display_name: "Kubernetes — no unauthorised external IPs on services (root)"
+    enforcement_mode: Default
+    parameters:
+      allowedExternalIPs:
+        value: []
+    non_compliance_messages:
+      - message: "Kubernetes services must not expose unauthorised external IP addresses (CVE-2020-8554 mitigation)."
+
+  root_k8s_approved_host_network_ports:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.k8s_approved_host_network_ports.id
+    display_name: "Kubernetes — approved host network and port range only (root)"
+    enforcement_mode: Default
+    parameters:
+      allowHostNetwork:
+        value: false
+      minPort:
+        value: 0
+      maxPort:
+        value: 0
+
+  root_k8s_container_resource_limits:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:externals.policy_definitions.k8s_container_resource_limits.id
+    display_name: "Kubernetes — container CPU and memory limits required (root)"
+    enforcement_mode: Default
+    parameters:
+      cpuLimit:
+        value: "4"
+      memoryLimit:
+        value: "8Gi"
+    non_compliance_messages:
+      - message: "Kubernetes containers must declare CPU (≤4 cores) and memory (≤8Gi) resource limits."
+
+  # ── Pillar 7: Regulatory compliance frameworks — landing zones ─────────────
+  # DoNotEnforce = audit-only visibility in the compliance dashboard.
+  # Promote to Default after gap remediation work is completed per framework.
+
+  lz_iso_27001:
+    scope: ref:azure_management_groups.mg_landing_zones.id
+    policy_definition_id: ref:externals.policy_set_definitions.iso_27001.id
+    display_name: "ISO 27001:2013 (landing zones)"
+    enforcement_mode: DoNotEnforce
+    non_compliance_messages:
+      - message: "Resource does not comply with ISO 27001:2013 controls."
+
+  lz_nist_800_53:
+    scope: ref:azure_management_groups.mg_landing_zones.id
+    policy_definition_id: ref:externals.policy_set_definitions.nist_800_53_r5.id
+    display_name: "NIST SP 800-53 Rev. 5 (landing zones)"
+    enforcement_mode: DoNotEnforce
+    non_compliance_messages:
+      - message: "Resource does not comply with NIST SP 800-53 Rev. 5 controls."
+
+  lz_pci_dss_v4:
+    scope: ref:azure_management_groups.mg_landing_zones.id
+    policy_definition_id: ref:externals.policy_set_definitions.pci_dss_v4.id
+    display_name: "PCI DSS v4 (landing zones)"
+    enforcement_mode: DoNotEnforce
+    non_compliance_messages:
+      - message: "Resource does not comply with PCI DSS v4 controls."
+
+  lz_hipaa_hitrust:
+    scope: ref:azure_management_groups.mg_landing_zones.id
+    policy_definition_id: ref:externals.policy_set_definitions.hipaa_hitrust.id
+    display_name: "HITRUST/HIPAA (landing zones)"
+    enforcement_mode: DoNotEnforce
+    non_compliance_messages:
+      - message: "Resource does not comply with HITRUST/HIPAA controls."
+
+  corp_nist_800_53:
+    scope: ref:azure_management_groups.mg_corp.id
+    policy_definition_id: ref:externals.policy_set_definitions.nist_800_53_r5.id
+    display_name: "NIST SP 800-53 Rev. 5 (Corp)"
+    enforcement_mode: DoNotEnforce
+
+  corp_pci_dss_v4:
+    scope: ref:azure_management_groups.mg_corp.id
+    policy_definition_id: ref:externals.policy_set_definitions.pci_dss_v4.id
+    display_name: "PCI DSS v4 (Corp)"
+    enforcement_mode: DoNotEnforce
+
+  # ── Root management group assignments ──────────────────────────────────────
+
+  root_deny_unapproved_regions:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:azure_policy_definitions.deny_unapproved_regions.id
+    display_name: "Deny resources outside approved regions (root)"
+    enforcement_mode: Default
+    parameters:
+      allowedLocations:
+        value: ["westeurope", "northeurope"]
+    non_compliance_messages:
+      - message: "Resources must be deployed in westeurope or northeurope."
+
+  root_tagging_baseline:
+    scope: ref:azure_management_groups.mg_root.id
+    policy_definition_id: ref:azure_policy_set_definitions.lz_tagging_baseline.id
+    display_name: "Tagging Baseline (root)"
+    enforcement_mode: Default
+
+  # ── Landing Zones assignments ───────────────────────────────────────────────
+
+  lz_network_baseline:
+    scope: ref:azure_management_groups.mg_landing_zones.id
+    policy_definition_id: ref:azure_policy_set_definitions.lz_network_baseline.id
+    display_name: "Network Security Baseline (landing zones)"
+    enforcement_mode: Default
+
+  lz_cis_benchmark:
+    scope: ref:azure_management_groups.mg_landing_zones.id
+    # Built-in initiative referenced via externals — no ARM ID hardcoded here
+    policy_definition_id: ref:externals.policy_set_definitions.cis_benchmark.id
+    display_name: "CIS Microsoft Azure Foundations Benchmark v2.0.0 (landing zones)"
+    enforcement_mode: DoNotEnforce
+    non_compliance_messages:
+      - message: "Resource does not comply with CIS Microsoft Azure Foundations Benchmark v2.0.0."
+
+  lz_mcsb:
+    scope: ref:azure_management_groups.mg_landing_zones.id
+    # Built-in initiative referenced via externals
+    policy_definition_id: ref:externals.policy_set_definitions.mcsb.id
+    display_name: "Microsoft Cloud Security Benchmark (landing zones)"
+    enforcement_mode: DoNotEnforce
+
+  # ── Corp management group assignments ───────────────────────────────────────
+
+  corp_allowed_locations:
+    scope: ref:azure_management_groups.mg_corp.id
+    # Built-in policy referenced via externals
+    policy_definition_id: ref:externals.policy_definitions.allowed_locations.id
+    display_name: "Allowed locations (Corp)"
+    enforcement_mode: Default
+    parameters:
+      listOfAllowedLocations:
+        value: ["westeurope", "northeurope"]
+
+  # ── SOC 2 Type 2 compliance assignments (Landing Zones) ────────────────────
+  # CC6 — Logical and Physical Access Controls
+  # CC7 — System Operations
+
+  lz_soc2:
+    scope: ref:azure_management_groups.mg_landing_zones.id
+    policy_definition_id: ref:externals.policy_set_definitions.soc2_type2.id
+    display_name: "SOC 2 Type 2 (landing zones)"
+    enforcement_mode: DoNotEnforce
+    non_compliance_messages:
+      - message: "Resource does not comply with SOC 2 Type 2 controls."
+
+  lz_secure_transfer_storage:
+    scope: ref:azure_management_groups.mg_landing_zones.id
+    policy_definition_id: ref:externals.policy_definitions.secure_transfer_storage.id
+    display_name: "SOC 2 CC6.1 — Secure transfer for storage accounts (landing zones)"
+    enforcement_mode: Default
+    non_compliance_messages:
+      - message: "CC6.1: Storage accounts must enforce HTTPS (secure transfer)."
+
+  lz_deny_public_nic:
+    scope: ref:azure_management_groups.mg_landing_zones.id
+    policy_definition_id: ref:externals.policy_definitions.deny_public_ip.id
+    display_name: "SOC 2 CC6.3 — Deny public IPs on NICs (landing zones)"
+    enforcement_mode: Default
+    non_compliance_messages:
+      - message: "CC6.3: Network interfaces must not have public IP addresses."
+
+  lz_kv_firewall:
+    scope: ref:azure_management_groups.mg_landing_zones.id
+    policy_definition_id: ref:externals.policy_definitions.kv_firewall.id
+    display_name: "SOC 2 CC6.3 — Key Vault firewall required (landing zones)"
+    enforcement_mode: Default
+    non_compliance_messages:
+      - message: "CC6.3: Key Vaults must have firewall enabled or public network access disabled."
+
+  lz_nsg_subnet:
+    scope: ref:azure_management_groups.mg_landing_zones.id
+    policy_definition_id: ref:externals.policy_definitions.nsg_subnet.id
+    display_name: "SOC 2 CC6.3 — Subnets must have NSG (landing zones)"
+    enforcement_mode: Default
+    non_compliance_messages:
+      - message: "CC6.3: All subnets must be associated with a Network Security Group."
+
+  lz_mcsb_soc2:
+    scope: ref:azure_management_groups.mg_landing_zones.id
+    policy_definition_id: ref:externals.policy_set_definitions.mcsb.id
+    display_name: "SOC 2 CC7 — Microsoft Cloud Security Benchmark (landing zones)"
+    enforcement_mode: DoNotEnforce
+    non_compliance_messages:
+      - message: "CC7: Resource does not meet Microsoft Cloud Security Benchmark controls required for SOC 2 CC7."
+
+  # ── Platform management group assignments ───────────────────────────────────
+
+  platform_deny_public_ip:
+    scope: ref:azure_management_groups.mg_platform.id
+    # Built-in policy referenced via externals
+    policy_definition_id: ref:externals.policy_definitions.deny_public_ip.id
+    display_name: "Deny public IPs (Platform)"
+    enforcement_mode: Default
+    non_compliance_messages:
+      - message: "Public IP addresses are not permitted in the Platform management group."
+
+# ── Role Assignments at management group scope ────────────────────────────────
+# All scopes use ref:azure_management_groups.<key>.id (plan-time known).
+# All principal_id values use ref:entraid_groups.<key>.id.
+# All role_definition_id values use ref:externals.azure_role_definitions.<key>.id.
+# No GUIDs are hardcoded in this section.
+azure_role_assignments:
+
+  # ── Root MG: Security Ops → Security Reader ────────────────────────────────
+  root_security_ops_reader:
+    scope:              ref:azure_management_groups.mg_root.id
+    role_definition_id: ref:externals.azure_role_definitions.security_reader.id
+    principal_id:       ref:entraid_groups.grp_security_ops.id
+    principal_type:     Group
+    description:        "ALZ Security Operations — Security Reader at tenant root scope"
+
+  # Root MG: Security Ops → Security Admin (for alert/remediation tasks)
+  root_security_ops_admin:
+    scope:              ref:azure_management_groups.mg_root.id
+    role_definition_id: ref:externals.azure_role_definitions.security_admin.id
+    principal_id:       ref:entraid_groups.grp_security_ops.id
+    principal_type:     Group
+    description:        "ALZ Security Operations — Security Admin at tenant root scope"
+
+  # Root MG: Global Readers → Reader
+  root_global_readers:
+    scope:              ref:azure_management_groups.mg_root.id
+    role_definition_id: ref:externals.azure_role_definitions.reader.id
+    principal_id:       ref:entraid_groups.grp_global_readers.id
+    principal_type:     Group
+    description:        "ALZ Global Readers — read-only access to all MGs"
+
+  # Root MG: Cost Management → Cost Management Reader
+  root_cost_management:
+    scope:              ref:azure_management_groups.mg_root.id
+    role_definition_id: ref:externals.azure_role_definitions.cost_management_reader.id
+    principal_id:       ref:entraid_groups.grp_cost_management.id
+    principal_type:     Group
+    description:        "ALZ FinOps — Cost Management Reader at tenant root scope"
+
+  # ── Platform MG: Platform Owners → Owner ──────────────────────────────────
+  platform_owners:
+    scope:              ref:azure_management_groups.mg_platform.id
+    role_definition_id: ref:externals.azure_role_definitions.owner.id
+    principal_id:       ref:entraid_groups.grp_platform_owners.id
+    principal_type:     Group
+    description:        "ALZ Platform Owners — Owner on Platform MG"
+
+  # Platform MG: Security Ops → Management Group Contributor (for policy/lock mgmt)
+  platform_security_mg_contributor:
+    scope:              ref:azure_management_groups.mg_platform.id
+    role_definition_id: ref:externals.azure_role_definitions.management_group_contributor.id
+    principal_id:       ref:entraid_groups.grp_security_ops.id
+    principal_type:     Group
+    description:        "ALZ Security Operations — Management Group Contributor on Platform"
+
+  # ── Platform / Management MG ──────────────────────────────────────────────
+  platform_management_admins:
+    scope:              ref:azure_management_groups.mg_platform_management.id
+    role_definition_id: ref:externals.azure_role_definitions.contributor.id
+    principal_id:       ref:entraid_groups.grp_management_admins.id
+    principal_type:     Group
+    description:        "ALZ Management Admins — Contributor on Management MG"
+
+  # ── Platform / Connectivity MG ────────────────────────────────────────────
+  platform_connectivity_network_admins:
+    scope:              ref:azure_management_groups.mg_platform_connectivity.id
+    role_definition_id: ref:externals.azure_role_definitions.network_contributor.id
+    principal_id:       ref:entraid_groups.grp_connectivity_admins.id
+    principal_type:     Group
+    description:        "ALZ Connectivity Admins — Network Contributor on Connectivity MG"
+
+  platform_connectivity_owners:
+    scope:              ref:azure_management_groups.mg_platform_connectivity.id
+    role_definition_id: ref:externals.azure_role_definitions.owner.id
+    principal_id:       ref:entraid_groups.grp_platform_owners.id
+    principal_type:     Group
+    description:        "ALZ Platform Owners — Owner on Connectivity MG (for hub-and-spoke management)"
+
+  # ── Platform / Identity MG ────────────────────────────────────────────────
+  platform_identity_admins:
+    scope:              ref:azure_management_groups.mg_platform_identity.id
+    role_definition_id: ref:externals.azure_role_definitions.contributor.id
+    principal_id:       ref:entraid_groups.grp_identity_admins.id
+    principal_type:     Group
+    description:        "ALZ Identity Admins — Contributor on Identity MG"
+
+  # ── Landing Zones MG ──────────────────────────────────────────────────────
+  lz_owners_contributor:
+    scope:              ref:azure_management_groups.mg_landing_zones.id
+    role_definition_id: ref:externals.azure_role_definitions.contributor.id
+    principal_id:       ref:entraid_groups.grp_lz_owners.id
+    principal_type:     Group
+    description:        "ALZ Landing Zone Owners — Contributor at Landing Zones MG"
+
+  lz_security_reader:
+    scope:              ref:azure_management_groups.mg_landing_zones.id
+    role_definition_id: ref:externals.azure_role_definitions.security_reader.id
+    principal_id:       ref:entraid_groups.grp_security_ops.id
+    principal_type:     Group
+    description:        "ALZ Security Operations — Security Reader at Landing Zones MG"
+
+  lz_mg_contributor:
+    scope:              ref:azure_management_groups.mg_landing_zones.id
+    role_definition_id: ref:externals.azure_role_definitions.management_group_contributor.id
+    principal_id:       ref:entraid_groups.grp_lz_owners.id
+    principal_type:     Group
+    description:        "ALZ Landing Zone Owners — Management Group Contributor (for adding subscriptions)"
+
+  # ── Corp MG ───────────────────────────────────────────────────────────────
+  corp_contributors:
+    scope:              ref:azure_management_groups.mg_corp.id
+    role_definition_id: ref:externals.azure_role_definitions.contributor.id
+    principal_id:       ref:entraid_groups.grp_corp_contributors.id
+    principal_type:     Group
+    description:        "ALZ Corp Team — Contributor on Corp MG"
+
+  corp_security_reader:
+    scope:              ref:azure_management_groups.mg_corp.id
+    role_definition_id: ref:externals.azure_role_definitions.security_reader.id
+    principal_id:       ref:entraid_groups.grp_security_ops.id
+    principal_type:     Group
+    description:        "ALZ Security Operations — Security Reader on Corp MG"
+
+  # ── Online MG ─────────────────────────────────────────────────────────────
+  online_contributors:
+    scope:              ref:azure_management_groups.mg_online.id
+    role_definition_id: ref:externals.azure_role_definitions.contributor.id
+    principal_id:       ref:entraid_groups.grp_online_contributors.id
+    principal_type:     Group
+    description:        "ALZ Online Team — Contributor on Online MG"
+
+  online_security_reader:
+    scope:              ref:azure_management_groups.mg_online.id
+    role_definition_id: ref:externals.azure_role_definitions.security_reader.id
+    principal_id:       ref:entraid_groups.grp_security_ops.id
+    principal_type:     Group
+    description:        "ALZ Security Operations — Security Reader on Online MG"
+
+  # ── Sandbox MG ────────────────────────────────────────────────────────────
+  sandbox_contributors:
+    scope:              ref:azure_management_groups.mg_sandbox.id
+    role_definition_id: ref:externals.azure_role_definitions.contributor.id
+    principal_id:       ref:entraid_groups.grp_sandbox_contributors.id
+    principal_type:     Group
+    description:        "ALZ Sandbox Team — Contributor (self-service experimentation)"
+
+  sandbox_global_readers:
+    scope:              ref:azure_management_groups.mg_sandbox.id
+    role_definition_id: ref:externals.azure_role_definitions.reader.id
+    principal_id:       ref:entraid_groups.grp_global_readers.id
+    principal_type:     Group
+    description:        "ALZ Global Readers — Reader on Sandbox MG"
+
+  # ── Decommissioned MG ─────────────────────────────────────────────────────
+  decommissioned_security_reader:
+    scope:              ref:azure_management_groups.mg_decommissioned.id
+    role_definition_id: ref:externals.azure_role_definitions.security_reader.id
+    principal_id:       ref:entraid_groups.grp_security_ops.id
+    principal_type:     Group
+    description:        "ALZ Security Operations — Security Reader on Decommissioned MG"
+
+  decommissioned_global_readers:
+    scope:              ref:azure_management_groups.mg_decommissioned.id
+    role_definition_id: ref:externals.azure_role_definitions.reader.id
+    principal_id:       ref:entraid_groups.grp_global_readers.id
+    principal_type:     Group
+    description:        "ALZ Global Readers — Reader on Decommissioned MG"

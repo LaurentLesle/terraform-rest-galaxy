@@ -197,6 +197,31 @@ azure_billing_scope_role_definitions:
   search_filter: "properties.roleName eq '{role_name}'"
   attributes: "*"
 
+azure_management_groups:
+  api: arm
+  path: "/providers/Microsoft.Management/managementGroups/{management_group_id}"
+  api_version: "2023-04-01"
+  operation: GET
+  attributes: [management_group_id, display_name, tenant_id]
+
+azure_policy_definitions:
+  api: arm
+  # id is the full ARM path, e.g. /providers/Microsoft.Authorization/policyDefinitions/{guid}
+  # Use {id} as path template so the provided id is used directly for GET validation.
+  path: "{id}"
+  api_version: "2025-11-01"
+  operation: GET
+  attributes: [id, display_name, policy_type, mode]
+
+azure_policy_set_definitions:
+  api: arm
+  # id is the full ARM path, e.g. /providers/Microsoft.Authorization/policySetDefinitions/{guid}
+  # Use {id} as path template so the provided id is used directly for GET validation.
+  path: "{id}"
+  api_version: "2025-11-01"
+  operation: GET
+  attributes: [id, display_name, policy_type]
+
 # ── Caller identity (token introspection) ────────────────────────────────────
 
 caller_context:
