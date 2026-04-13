@@ -4,11 +4,17 @@ name: Release (Semver)
 # Trigger: Push tag matching v*.*.* (e.g., v1.0.0, v1.2.3)
 # Tags should be created by the "Prepare Release" workflow, which builds
 # flat .tf files at root for Terraform registry consumers.
+#
+# Also supports workflow_dispatch so the Prepare Release workflow can trigger
+# it directly (tags pushed via GITHUB_TOKEN don't fire push events).
+# When triggered manually, use --ref v<version> so github.ref_name resolves
+# to the tag name.
 
 on:
   push:
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+*'
+  workflow_dispatch:
 
 env:
   TF_VERSION: "1.14.5"
