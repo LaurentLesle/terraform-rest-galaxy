@@ -7,6 +7,7 @@ variable "github_organization_variables" {
     value                   = string
     visibility              = string
     selected_repository_ids = optional(list(number), null)
+    check_existance         = optional(bool, null)
   }))
   description = <<-EOT
     Map of GitHub Actions variables scoped to an entire organization. Shared
@@ -50,4 +51,5 @@ module "github_organization_variables" {
   value                   = each.value.value
   visibility              = each.value.visibility
   selected_repository_ids = try(each.value.selected_repository_ids, null)
+  check_existance         = try(each.value.check_existance, var.github_check_existance)
 }

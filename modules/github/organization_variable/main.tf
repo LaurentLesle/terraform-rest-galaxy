@@ -25,9 +25,10 @@ locals {
 }
 
 resource "rest_resource" "organization_variable" {
-  path          = "/orgs/${var.organization}/actions/variables"
-  create_method = "POST"
-  update_method = "PATCH"
+  path            = "/orgs/${var.organization}/actions/variables"
+  create_method   = "POST"
+  update_method   = "PATCH"
+  check_existance = var.check_existance
 
   read_path   = "/orgs/${var.organization}/actions/variables/${var.name}"
   update_path = "/orgs/${var.organization}/actions/variables/${var.name}"

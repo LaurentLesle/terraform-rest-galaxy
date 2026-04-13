@@ -49,6 +49,16 @@ resource "rest_resource" "repository" {
 
   body = local.body
 
+  # auto_init, license_template and gitignore_template are accepted by
+  # POST /orgs/{org}/repos but never returned by GET /repos/{org}/{name}.
+  # Without write_only_attrs the provider sees null on read-back and raises
+  # "Provider produced inconsistent result after apply".
+  write_only_attrs = toset([
+    "auto_init",
+    "license_template",
+    "gitignore_template",
+  ])
+
   output_attrs = toset([
     "id",
     "node_id",
