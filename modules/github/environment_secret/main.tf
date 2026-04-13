@@ -29,8 +29,9 @@ data "rest_resource" "public_key" {
 
 # ── Encrypt and upload the secret ────────────────────────────────────────────
 resource "rest_resource" "secret" {
-  path          = "/repos/${var.owner}/${var.repo}/environments/${var.environment_name}/secrets/${var.secret_name}"
-  create_method = "PUT"
+  path            = "/repos/${var.owner}/${var.repo}/environments/${var.environment_name}/secrets/${var.secret_name}"
+  create_method   = "PUT"
+  check_existance = var.check_existance
 
   read_path   = "/repos/${var.owner}/${var.repo}/environments/${var.environment_name}/secrets/${var.secret_name}"
   delete_path = "/repos/${var.owner}/${var.repo}/environments/${var.environment_name}/secrets/${var.secret_name}"

@@ -11,7 +11,7 @@
 set -euo pipefail
 
 REST_SRC="${1:-providers/terraform-provider-rest}"
-PROVIDER_VERSION="1.2.0"
+PROVIDER_VERSION="1.2.2"
 OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
 ARCH="$(uname -m)"
 case "$ARCH" in

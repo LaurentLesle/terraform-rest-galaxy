@@ -11,9 +11,10 @@
 # and a valid GitHub token with repo scope.
 
 resource "rest_resource" "environment_variable" {
-  path          = "/repos/${var.owner}/${var.repo}/environments/${var.environment_name}/variables"
-  create_method = "POST"
-  update_method = "PATCH"
+  path            = "/repos/${var.owner}/${var.repo}/environments/${var.environment_name}/variables"
+  create_method   = "POST"
+  update_method   = "PATCH"
+  check_existance = var.check_existance
 
   read_path   = "/repos/${var.owner}/${var.repo}/environments/${var.environment_name}/variables/${var.name}"
   update_path = "/repos/${var.owner}/${var.repo}/environments/${var.environment_name}/variables/${var.name}"

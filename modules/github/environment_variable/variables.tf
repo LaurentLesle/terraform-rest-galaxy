@@ -1,3 +1,11 @@
+# ── Provider behaviour ─────────────────────────────────────────────────────
+
+variable "check_existance" {
+  type        = bool
+  default     = false
+  description = "When true, the provider GETs the variable before creating it and adopts it into state if it already exists. Use this to reconcile drift or when a previous apply left the resource orphaned."
+}
+
 # ── Scope ────────────────────────────────────────────────────────────────────
 
 variable "owner" {
