@@ -44,7 +44,7 @@ resource "rest_resource" "group" {
     status_locator    = "code"
     default_delay_sec = 30
     status = {
-      success = "200"
+      success = ["200"]
       pending = ["404"]
     }
   }

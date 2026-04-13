@@ -70,7 +70,7 @@ resource "rest_resource" "express_route_circuit_peering" {
     status_locator    = "body.properties.provisioningState"
     default_delay_sec = 30
     status = {
-      success = "Succeeded"
+      success = ["Succeeded"]
       pending = ["Updating", "Provisioning", "Creating"]
     }
   }
@@ -79,7 +79,7 @@ resource "rest_resource" "express_route_circuit_peering" {
     status_locator    = "body.properties.provisioningState"
     default_delay_sec = 30
     status = {
-      success = "Succeeded"
+      success = ["Succeeded"]
       pending = ["Updating", "Provisioning"]
     }
   }
@@ -88,7 +88,7 @@ resource "rest_resource" "express_route_circuit_peering" {
     status_locator    = "code"
     default_delay_sec = 30
     status = {
-      success = "404"
+      success = ["404"]
       pending = ["200", "202"]
     }
   }

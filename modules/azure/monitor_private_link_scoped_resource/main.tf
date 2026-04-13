@@ -59,7 +59,7 @@ resource "rest_resource" "monitor_private_link_scoped_resource" {
     status_locator    = "body.properties.provisioningState"
     default_delay_sec = 15
     status = {
-      success = "Succeeded"
+      success = ["Succeeded"]
       pending = ["Creating", "Provisioning", "Updating", "Accepted"]
     }
   }
@@ -68,7 +68,7 @@ resource "rest_resource" "monitor_private_link_scoped_resource" {
     status_locator    = "body.properties.provisioningState"
     default_delay_sec = 15
     status = {
-      success = "Succeeded"
+      success = ["Succeeded"]
       pending = ["Updating", "Provisioning", "Accepted"]
     }
   }
@@ -78,7 +78,7 @@ resource "rest_resource" "monitor_private_link_scoped_resource" {
     status_locator    = "code"
     default_delay_sec = 15
     status = {
-      success = "404"
+      success = ["404"]
       pending = ["202", "200"]
     }
   }

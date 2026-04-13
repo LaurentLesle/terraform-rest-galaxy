@@ -99,7 +99,7 @@ resource "rest_resource" "private_endpoint" {
     status_locator    = "body.properties.provisioningState"
     default_delay_sec = 10
     status = {
-      success = "Succeeded"
+      success = ["Succeeded"]
       pending = ["Updating", "Provisioning", "Creating"]
     }
   }
@@ -108,7 +108,7 @@ resource "rest_resource" "private_endpoint" {
     status_locator    = "body.properties.provisioningState"
     default_delay_sec = 10
     status = {
-      success = "Succeeded"
+      success = ["Succeeded"]
       pending = ["Updating", "Provisioning"]
     }
   }
@@ -117,7 +117,7 @@ resource "rest_resource" "private_endpoint" {
     status_locator    = "code"
     default_delay_sec = 10
     status = {
-      success = "404"
+      success = ["404"]
       pending = ["200", "202"]
     }
   }
@@ -155,7 +155,7 @@ resource "rest_resource" "dns_zone_group" {
     status_locator    = "body.properties.provisioningState"
     default_delay_sec = 10
     status = {
-      success = "Succeeded"
+      success = ["Succeeded"]
       pending = ["Updating", "Creating"]
     }
   }
@@ -164,7 +164,7 @@ resource "rest_resource" "dns_zone_group" {
     status_locator    = "body.properties.provisioningState"
     default_delay_sec = 10
     status = {
-      success = "Succeeded"
+      success = ["Succeeded"]
       pending = ["Updating"]
     }
   }
@@ -173,7 +173,7 @@ resource "rest_resource" "dns_zone_group" {
     status_locator    = "code"
     default_delay_sec = 10
     status = {
-      success = "404"
+      success = ["404"]
       pending = ["200", "202"]
     }
   }

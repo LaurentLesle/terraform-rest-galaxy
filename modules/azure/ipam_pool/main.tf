@@ -61,7 +61,7 @@ resource "rest_resource" "ipam_pool" {
     status_locator    = "body.properties.provisioningState"
     default_delay_sec = 10
     status = {
-      success = "Succeeded"
+      success = ["Succeeded"]
       pending = ["Creating", "Updating"]
     }
   }
@@ -70,7 +70,7 @@ resource "rest_resource" "ipam_pool" {
     status_locator    = "body.properties.provisioningState"
     default_delay_sec = 10
     status = {
-      success = "Succeeded"
+      success = ["Succeeded"]
       pending = ["Creating", "Updating"]
     }
   }
@@ -79,7 +79,7 @@ resource "rest_resource" "ipam_pool" {
     status_locator    = "code"
     default_delay_sec = 10
     status = {
-      success = "404"
+      success = ["404"]
       pending = ["200", "202"]
     }
   }

@@ -74,7 +74,7 @@ resource "rest_resource" "monitor_private_link_scope" {
     status_locator    = "code"
     default_delay_sec = 15
     status = {
-      success = "404"
+      success = ["404"]
       pending = ["202", "200"]
     }
   }

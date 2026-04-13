@@ -144,7 +144,7 @@ resource "rest_resource" "postgresql_flexible_server" {
     status_locator    = "body.properties.state"
     default_delay_sec = 30
     status = {
-      success = "Ready"
+      success = ["Ready"]
       pending = ["Provisioning", "Starting", "Updating"]
     }
   }
@@ -153,7 +153,7 @@ resource "rest_resource" "postgresql_flexible_server" {
     status_locator    = "body.properties.state"
     default_delay_sec = 30
     status = {
-      success = "Ready"
+      success = ["Ready"]
       pending = ["Updating", "Restarting"]
     }
   }
@@ -162,7 +162,7 @@ resource "rest_resource" "postgresql_flexible_server" {
     status_locator    = "code"
     default_delay_sec = 15
     status = {
-      success = "404"
+      success = ["404"]
       pending = ["200", "202"]
     }
   }

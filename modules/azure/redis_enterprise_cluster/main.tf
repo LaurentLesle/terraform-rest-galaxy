@@ -61,7 +61,7 @@ resource "rest_resource" "redis_enterprise_cluster" {
     status_locator    = "body.properties.provisioningState"
     default_delay_sec = 60
     status = {
-      success = "Succeeded"
+      success = ["Succeeded"]
       pending = ["Creating", "Updating", "Accepted", "Provisioning", "Pending"]
     }
   }
@@ -71,7 +71,7 @@ resource "rest_resource" "redis_enterprise_cluster" {
     status_locator    = "body.properties.provisioningState"
     default_delay_sec = 30
     status = {
-      success = "Succeeded"
+      success = ["Succeeded"]
       pending = ["Updating", "Accepted", "Provisioning"]
     }
   }
@@ -81,7 +81,7 @@ resource "rest_resource" "redis_enterprise_cluster" {
     status_locator    = "code"
     default_delay_sec = 30
     status = {
-      success = "404"
+      success = ["404"]
       pending = ["202", "200"]
     }
   }

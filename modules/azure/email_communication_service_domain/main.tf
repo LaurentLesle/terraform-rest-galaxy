@@ -45,7 +45,7 @@ resource "rest_resource" "email_communication_service_domain" {
     status_locator    = "body.properties.provisioningState"
     default_delay_sec = 10
     status = {
-      success = "Succeeded"
+      success = ["Succeeded"]
       pending = ["Accepted", "Creating", "Updating", "Running"]
     }
   }
@@ -54,7 +54,7 @@ resource "rest_resource" "email_communication_service_domain" {
     status_locator    = "body.properties.provisioningState"
     default_delay_sec = 10
     status = {
-      success = "Succeeded"
+      success = ["Succeeded"]
       pending = ["Accepted", "Creating", "Updating", "Running"]
     }
   }
@@ -63,7 +63,7 @@ resource "rest_resource" "email_communication_service_domain" {
     status_locator    = "code"
     default_delay_sec = 10
     status = {
-      success = "404"
+      success = ["404"]
       pending = ["202", "200"]
     }
   }

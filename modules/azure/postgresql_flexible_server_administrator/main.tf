@@ -39,7 +39,7 @@ resource "rest_resource" "administrator" {
     status_locator    = "body.properties.objectId"
     default_delay_sec = 15
     status = {
-      success = var.object_id
+      success = [var.object_id]
     }
   }
 
@@ -47,7 +47,7 @@ resource "rest_resource" "administrator" {
     status_locator    = "code"
     default_delay_sec = 15
     status = {
-      success = "404"
+      success = ["404"]
       pending = ["200", "202", "400"]
     }
   }

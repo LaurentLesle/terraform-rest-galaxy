@@ -92,7 +92,7 @@ resource "rest_resource" "billing_associated_tenant" {
     status_locator    = "code"
     default_delay_sec = 10
     status = {
-      success = "200"
+      success = ["200"]
       pending = ["201", "202"]
     }
   }
@@ -102,7 +102,7 @@ resource "rest_resource" "billing_associated_tenant" {
     status_locator    = "code"
     default_delay_sec = 10
     status = {
-      success = "200"
+      success = ["200"]
       pending = ["202"]
     }
   }

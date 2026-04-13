@@ -90,7 +90,7 @@ resource "rest_resource" "subscription" {
     status_locator    = "body.properties.provisioningState"
     default_delay_sec = 10
     status = {
-      success = "Succeeded"
+      success = ["Succeeded"]
       pending = ["Accepted"]
     }
   }

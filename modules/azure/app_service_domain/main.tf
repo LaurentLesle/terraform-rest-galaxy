@@ -135,7 +135,7 @@ resource "rest_resource" "app_service_domain" {
     status_locator    = "body.properties.provisioningState"
     default_delay_sec = 30
     status = {
-      success = "Succeeded"
+      success = ["Succeeded"]
       pending = ["InProgress"]
     }
   }

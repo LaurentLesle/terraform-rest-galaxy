@@ -125,7 +125,7 @@ resource "rest_resource" "foundry_deployment" {
     status_locator    = "body.properties.provisioningState"
     default_delay_sec = 10
     status = {
-      success = "Succeeded"
+      success = ["Succeeded"]
       pending = ["Creating", "Updating", "Accepted", "Running", "Scaling"]
     }
   }
@@ -134,7 +134,7 @@ resource "rest_resource" "foundry_deployment" {
     status_locator    = "body.properties.provisioningState"
     default_delay_sec = 10
     status = {
-      success = "Succeeded"
+      success = ["Succeeded"]
       pending = ["Creating", "Updating", "Accepted", "Running", "Scaling"]
     }
   }
@@ -144,7 +144,7 @@ resource "rest_resource" "foundry_deployment" {
     status_locator    = "code"
     default_delay_sec = 10
     status = {
-      success = "404"
+      success = ["404"]
       pending = ["202", "200"]
     }
   }

@@ -68,7 +68,7 @@ resource "rest_resource" "user" {
     status_locator    = "code"
     default_delay_sec = 5
     status = {
-      success = "200"
+      success = ["200"]
       pending = ["404"]
     }
   }

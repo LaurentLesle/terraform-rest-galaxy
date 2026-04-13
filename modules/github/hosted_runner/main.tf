@@ -41,7 +41,7 @@ resource "rest_resource" "hosted_runner" {
     status_locator    = "body.status"
     default_delay_sec = 30
     status = {
-      success = "Ready"
+      success = ["Ready"]
       pending = ["Provisioning"]
     }
   }

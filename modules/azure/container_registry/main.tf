@@ -86,7 +86,7 @@ resource "rest_resource" "container_registry" {
     status_locator    = "body.properties.provisioningState"
     default_delay_sec = 5
     status = {
-      success = "Succeeded"
+      success = ["Succeeded"]
       pending = ["Creating", "Updating"]
     }
   }
@@ -95,7 +95,7 @@ resource "rest_resource" "container_registry" {
     status_locator    = "body.properties.provisioningState"
     default_delay_sec = 5
     status = {
-      success = "Succeeded"
+      success = ["Succeeded"]
       pending = ["Updating"]
     }
   }
@@ -104,7 +104,7 @@ resource "rest_resource" "container_registry" {
     status_locator    = "code"
     default_delay_sec = 5
     status = {
-      success = "404"
+      success = ["404"]
       pending = ["200", "202"]
     }
   }

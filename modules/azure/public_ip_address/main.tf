@@ -68,7 +68,7 @@ resource "rest_resource" "public_ip_address" {
     status_locator    = "body.properties.provisioningState"
     default_delay_sec = 10
     status = {
-      success = "Succeeded"
+      success = ["Succeeded"]
       pending = ["Updating", "Provisioning"]
     }
   }
@@ -77,7 +77,7 @@ resource "rest_resource" "public_ip_address" {
     status_locator    = "body.properties.provisioningState"
     default_delay_sec = 10
     status = {
-      success = "Succeeded"
+      success = ["Succeeded"]
       pending = ["Updating", "Provisioning"]
     }
   }
@@ -86,7 +86,7 @@ resource "rest_resource" "public_ip_address" {
     status_locator    = "code"
     default_delay_sec = 10
     status = {
-      success = "404"
+      success = ["404"]
       pending = ["200", "202"]
     }
   }

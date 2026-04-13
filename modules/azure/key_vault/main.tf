@@ -90,7 +90,7 @@ resource "rest_resource" "key_vault" {
     status_locator    = "body.properties.provisioningState"
     default_delay_sec = 5
     status = {
-      success = "Succeeded"
+      success = ["Succeeded"]
       pending = ["Provisioning", "Accepted", "RegisteringDns"]
     }
   }
@@ -99,7 +99,7 @@ resource "rest_resource" "key_vault" {
     status_locator    = "body.properties.provisioningState"
     default_delay_sec = 5
     status = {
-      success = "Succeeded"
+      success = ["Succeeded"]
       pending = ["Provisioning", "Accepted", "RegisteringDns"]
     }
   }

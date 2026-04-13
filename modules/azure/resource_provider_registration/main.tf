@@ -31,7 +31,7 @@ resource "rest_operation" "register" {
     url_locator       = "exact.https://management.azure.com${local.provider_path}?api-version=${local.api_version}"
     default_delay_sec = 10
     status = {
-      success = "Registered"
+      success = ["Registered"]
       pending = ["Registering"]
     }
   }

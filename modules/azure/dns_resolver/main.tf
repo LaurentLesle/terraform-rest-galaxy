@@ -44,7 +44,7 @@ resource "rest_resource" "dns_resolver" {
     status_locator    = "body.status"
     default_delay_sec = 10
     status = {
-      success = "Succeeded"
+      success = ["Succeeded"]
       pending = ["InProgress"]
     }
   }
@@ -54,7 +54,7 @@ resource "rest_resource" "dns_resolver" {
     status_locator    = "body.status"
     default_delay_sec = 10
     status = {
-      success = "Succeeded"
+      success = ["Succeeded"]
       pending = ["InProgress"]
     }
   }
@@ -64,7 +64,7 @@ resource "rest_resource" "dns_resolver" {
     status_locator    = "body.status"
     default_delay_sec = 10
     status = {
-      success = "Succeeded"
+      success = ["Succeeded"]
       pending = ["InProgress"]
     }
   }
@@ -113,7 +113,7 @@ resource "rest_resource" "inbound_endpoint" {
     status_locator    = "body.status"
     default_delay_sec = 10
     status = {
-      success = "Succeeded"
+      success = ["Succeeded"]
       pending = ["InProgress"]
     }
   }
@@ -123,7 +123,7 @@ resource "rest_resource" "inbound_endpoint" {
     status_locator    = "body.status"
     default_delay_sec = 10
     status = {
-      success = "Succeeded"
+      success = ["Succeeded"]
       pending = ["InProgress"]
     }
   }
@@ -133,7 +133,7 @@ resource "rest_resource" "inbound_endpoint" {
     status_locator    = "body.status"
     default_delay_sec = 10
     status = {
-      success = "Succeeded"
+      success = ["Succeeded"]
       pending = ["InProgress"]
     }
   }

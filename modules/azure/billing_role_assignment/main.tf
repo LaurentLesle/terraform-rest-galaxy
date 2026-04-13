@@ -73,7 +73,7 @@ resource "rest_resource" "ea_role_assignment" {
     status_locator    = "body.properties.provisioningState"
     default_delay_sec = 10
     status = {
-      success = "Succeeded"
+      success = ["Succeeded"]
       pending = ["New", "Pending", "Provisioning", "PendingBilling", "ConfirmedBilling", "Creating", "Created"]
     }
   }
@@ -111,7 +111,7 @@ resource "rest_resource" "mca_role_assignment" {
     status_locator    = "code"
     default_delay_sec = 5
     status = {
-      success = "200"
+      success = ["200"]
       pending = ["202"]
     }
   }

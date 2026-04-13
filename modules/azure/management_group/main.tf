@@ -49,7 +49,7 @@ resource "rest_resource" "management_group" {
     status_locator    = "body.properties.provisioningState"
     default_delay_sec = 5
     status = {
-      success = "Succeeded"
+      success = ["Succeeded"]
       pending = ["Accepted", "Updating"]
     }
   }
@@ -59,7 +59,7 @@ resource "rest_resource" "management_group" {
     status_locator    = "code"
     default_delay_sec = 5
     status = {
-      success = "404"
+      success = ["404"]
       pending = ["200", "202"]
     }
   }
@@ -69,7 +69,7 @@ resource "rest_resource" "management_group" {
     status_locator    = "body.properties.provisioningState"
     default_delay_sec = 5
     status = {
-      success = "Succeeded"
+      success = ["Succeeded"]
       pending = ["Accepted", "Updating"]
     }
   }

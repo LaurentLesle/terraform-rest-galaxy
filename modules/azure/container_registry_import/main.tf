@@ -31,7 +31,7 @@ resource "rest_operation" "import_image" {
     status_locator    = "code"
     default_delay_sec = 10
     status = {
-      success = "200"
+      success = ["200"]
       pending = ["202"]
     }
   }

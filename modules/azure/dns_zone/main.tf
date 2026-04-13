@@ -61,7 +61,7 @@ resource "rest_resource" "dns_zone" {
     status_locator    = "code"
     default_delay_sec = 10
     status = {
-      success = "404"
+      success = ["404"]
       pending = ["202", "200"]
     }
   }

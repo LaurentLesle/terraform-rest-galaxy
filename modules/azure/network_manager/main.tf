@@ -65,7 +65,7 @@ resource "rest_resource" "network_manager" {
     status_locator    = "code"
     default_delay_sec = 10
     status = {
-      success = "404"
+      success = ["404"]
       pending = ["200", "202"]
     }
   }

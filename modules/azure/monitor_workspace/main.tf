@@ -56,7 +56,7 @@ resource "rest_resource" "monitor_workspace" {
     url_locator       = "header.Azure-AsyncOperation"
     default_delay_sec = 15
     status = {
-      success = "Succeeded"
+      success = ["Succeeded"]
       pending = ["Creating", "Updating", "Accepted", "Running", "InProgress"]
     }
   }
@@ -66,7 +66,7 @@ resource "rest_resource" "monitor_workspace" {
     url_locator       = "header.Azure-AsyncOperation"
     default_delay_sec = 15
     status = {
-      success = "Succeeded"
+      success = ["Succeeded"]
       pending = ["Updating", "Accepted", "Running", "InProgress"]
     }
   }
@@ -76,7 +76,7 @@ resource "rest_resource" "monitor_workspace" {
     status_locator    = "code"
     default_delay_sec = 15
     status = {
-      success = "404"
+      success = ["404"]
       pending = ["202", "200"]
     }
   }

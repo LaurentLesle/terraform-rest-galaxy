@@ -70,7 +70,7 @@ resource "rest_resource" "job" {
     status_locator    = "body.status.succeeded"
     default_delay_sec = 10
     status = {
-      success = "1"
+      success = ["1"]
       pending = ["0"]
     }
   }

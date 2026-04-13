@@ -90,7 +90,7 @@ resource "rest_resource" "blob" {
     status_locator    = "code"
     default_delay_sec = 5
     status = {
-      success = "404"
+      success = ["404"]
       pending = ["200", "202"]
     }
   }
