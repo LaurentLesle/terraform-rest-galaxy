@@ -27,6 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: write
     steps:
       - name: Checkout main
         uses: actions/checkout@v6
@@ -73,4 +74,15 @@ jobs:
           # Push the tag (and its commit). The commit is NOT on any branch —
           # it's reachable only via the tag. main stays clean.
           git push origin "v${VERSION}"
-          echo "::notice::Tag v${VERSION} created. The Release workflow will now run automatically."
+          echo "::notice::Tag v${VERSION} created."
+
+      # Tags pushed via GITHUB_TOKEN don't fire push events (GitHub safety
+      # measure against infinite loops). Explicitly trigger the release
+      # workflow via workflow_dispatch, which IS allowed with GITHUB_TOKEN.
+      - name: Trigger release workflow
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          gh workflow run release.yml --ref "v${VERSION}"
+          echo "::notice::Release workflow triggered for v${VERSION}."
