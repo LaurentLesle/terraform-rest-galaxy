@@ -20,6 +20,7 @@ run "plan_data_collection_rule_association" {
   }
 
   variables {
+    subscription_id         = "00000000-0000-0000-0000-000000000000"
     resource_id             = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/test-rg/providers/Microsoft.Compute/virtualMachines/vm-test"
     association_name        = "dcra-test"
     data_collection_rule_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/test-rg/providers/Microsoft.Insights/dataCollectionRules/dcr-test"

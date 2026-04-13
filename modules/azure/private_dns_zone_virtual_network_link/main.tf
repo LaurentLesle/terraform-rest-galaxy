@@ -28,11 +28,29 @@ locals {
   )
 }
 
+data "rest_resource" "provider_check" {
+  id = "/subscriptions/${var.subscription_id}/providers/Microsoft.Network"
+
+  query = {
+    api-version = ["2025-04-01"]
+  }
+
+  output_attrs = toset(["registrationState"])
+}
+
 resource "rest_resource" "private_dns_zone_virtual_network_link" {
   path            = local.link_path
   create_method   = "PUT"
   update_method   = "PATCH"
   check_existance = var.check_existance
+
+  lifecycle {
+    precondition {
+      condition     = data.rest_resource.provider_check.output.registrationState == "Registered"
+      error_message = "Resource provider Microsoft.Network is not registered on subscription ${var.subscription_id}. Add to your config YAML:\n\n  azure_resource_provider_registrations:\n    network:\n      resource_provider_namespace: Microsoft.Network"
+    }
+  }
+
 
   query = {
     api-version = [local.api_version]

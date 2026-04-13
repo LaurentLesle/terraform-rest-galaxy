@@ -1,5 +1,10 @@
 default_location: westeurope
 
+# ── State backend ────────────────────────────────────────────────────────────
+terraform_backend:
+  type: local
+  path: observability_complete.tfstate
+
 azure_resource_groups:
   obs-complete:
     resource_group_name: rg-obs-complete

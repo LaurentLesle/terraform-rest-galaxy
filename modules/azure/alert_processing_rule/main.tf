@@ -61,10 +61,28 @@ locals {
   )
 }
 
+data "rest_resource" "provider_check" {
+  id = "/subscriptions/${var.subscription_id}/providers/Microsoft.AlertsManagement"
+
+  query = {
+    api-version = ["2025-04-01"]
+  }
+
+  output_attrs = toset(["registrationState"])
+}
+
 resource "rest_resource" "alert_processing_rule" {
   path            = local.apr_path
   create_method   = "PUT"
   check_existance = var.check_existance
+
+  lifecycle {
+    precondition {
+      condition     = data.rest_resource.provider_check.output.registrationState == "Registered"
+      error_message = "Resource provider Microsoft.AlertsManagement is not registered on subscription ${var.subscription_id}. Add to your config YAML:\n\n  azure_resource_provider_registrations:\n    alerts_management:\n      resource_provider_namespace: Microsoft.AlertsManagement"
+    }
+  }
+
 
   query = {
     api-version = [local.api_version]

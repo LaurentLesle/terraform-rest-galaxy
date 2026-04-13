@@ -11,9 +11,9 @@ locals {
 
   email_receivers = [
     for r in var.email_receivers : {
-      name                  = r.name
-      emailAddress          = r.email_address
-      useCommonAlertSchema  = r.use_common_alert_schema
+      name                 = r.name
+      emailAddress         = r.email_address
+      useCommonAlertSchema = r.use_common_alert_schema
     }
   ]
 
@@ -28,10 +28,10 @@ locals {
   webhook_receivers = [
     for r in var.webhook_receivers : merge(
       {
-        name                   = r.name
-        serviceUri             = r.service_uri
-        useCommonAlertSchema   = r.use_common_alert_schema
-        useAadAuth             = r.use_aad_auth
+        name                 = r.name
+        serviceUri           = r.service_uri
+        useCommonAlertSchema = r.use_common_alert_schema
+        useAadAuth           = r.use_aad_auth
       },
       r.object_id != null ? { objectId = r.object_id } : {},
       r.identifier_uri != null ? { identifierUri = r.identifier_uri } : {},
@@ -80,39 +80,39 @@ locals {
 
   logic_app_receivers = [
     for r in var.logic_app_receivers : {
-      name                  = r.name
-      resourceId            = r.resource_id
-      callbackUrl           = r.callback_url
-      useCommonAlertSchema  = r.use_common_alert_schema
+      name                 = r.name
+      resourceId           = r.resource_id
+      callbackUrl          = r.callback_url
+      useCommonAlertSchema = r.use_common_alert_schema
     }
   ]
 
   azure_function_receivers = [
     for r in var.azure_function_receivers : {
-      name                    = r.name
-      functionAppResourceId   = r.function_app_resource_id
-      functionName            = r.function_name
-      httpTriggerUrl          = r.http_trigger_url
-      useCommonAlertSchema    = r.use_common_alert_schema
+      name                  = r.name
+      functionAppResourceId = r.function_app_resource_id
+      functionName          = r.function_name
+      httpTriggerUrl        = r.http_trigger_url
+      useCommonAlertSchema  = r.use_common_alert_schema
     }
   ]
 
   arm_role_receivers = [
     for r in var.arm_role_receivers : {
-      name                  = r.name
-      roleId                = r.role_id
-      useCommonAlertSchema  = r.use_common_alert_schema
+      name                 = r.name
+      roleId               = r.role_id
+      useCommonAlertSchema = r.use_common_alert_schema
     }
   ]
 
   event_hub_receivers = [
     for r in var.event_hub_receivers : merge(
       {
-        name                  = r.name
-        eventHubNameSpace     = r.event_hub_namespace
-        eventHubName          = r.event_hub_name
-        subscriptionId        = r.subscription_id
-        useCommonAlertSchema  = r.use_common_alert_schema
+        name                 = r.name
+        eventHubNameSpace    = r.event_hub_namespace
+        eventHubName         = r.event_hub_name
+        subscriptionId       = r.subscription_id
+        useCommonAlertSchema = r.use_common_alert_schema
       },
       r.tenant_id != null ? { tenantId = r.tenant_id } : {},
     )
@@ -145,10 +145,28 @@ locals {
   )
 }
 
+data "rest_resource" "provider_check" {
+  id = "/subscriptions/${var.subscription_id}/providers/Microsoft.Insights"
+
+  query = {
+    api-version = ["2025-04-01"]
+  }
+
+  output_attrs = toset(["registrationState"])
+}
+
 resource "rest_resource" "action_group" {
   path            = local.ag_path
   create_method   = "PUT"
   check_existance = var.check_existance
+
+  lifecycle {
+    precondition {
+      condition     = data.rest_resource.provider_check.output.registrationState == "Registered"
+      error_message = "Resource provider Microsoft.Insights is not registered on subscription ${var.subscription_id}. Add to your config YAML:\n\n  azure_resource_provider_registrations:\n    insights:\n      resource_provider_namespace: Microsoft.Insights"
+    }
+  }
+
 
   query = {
     api-version = [local.api_version]
@@ -160,6 +178,11 @@ resource "rest_resource" "action_group" {
     "properties.provisioningState",
     "properties.enabled",
     "properties.groupShortName",
+  ])
+
+  # location is create-only (x-ms-mutability: create, read) — changing it requires destroy + recreate.
+  force_new_attrs = toset([
+    "location",
   ])
 
   # PUT and DELETE are synchronous — no polling needed.

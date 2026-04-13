@@ -48,7 +48,7 @@ variable "azure_metric_alerts" {
         }
       }
   EOT
-  default = {}
+  default     = {}
 }
 
 locals {

@@ -1,5 +1,10 @@
 default_location: westeurope
 
+# ── State backend ────────────────────────────────────────────────────────────
+terraform_backend:
+  type: local
+  path: observability_alerting.tfstate
+
 azure_resource_groups:
   obs-alerting:
     resource_group_name: rg-obs-alerting

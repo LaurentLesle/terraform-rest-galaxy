@@ -1,0 +1,39 @@
+default_location: westeurope
+
+terraform_backend:
+  type: local
+  path: data_collection_rule_complete.tfstate
+
+azure_resource_groups:
+  example:
+    resource_group_name: rg-dcr-complete
+    location: westeurope
+    tags:
+      environment: dev
+      scenario: dcr-complete
+
+azure_log_analytics_workspaces:
+  example:
+    resource_group_name: ref:azure_resource_groups.example.resource_group_name
+    workspace_name: law-dcr-complete
+    location: ref:azure_resource_groups.example.location
+    tags: ref:azure_resource_groups.example.tags
+
+azure_data_collection_rules:
+  complete:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: ref:azure_resource_groups.example.resource_group_name
+    data_collection_rule_name: dcr-example-complete
+    location: ref:azure_resource_groups.example.location
+    description: "Complete DCR example collecting performance counters"
+    kind: Windows
+    destinations:
+      logAnalytics:
+        - workspaceResourceId: ref:azure_log_analytics_workspaces.example.id
+          name: destination-law
+    data_flows:
+      - streams:
+          - Microsoft-Perf
+        destinations:
+          - destination-law
+    tags: ref:azure_resource_groups.example.tags

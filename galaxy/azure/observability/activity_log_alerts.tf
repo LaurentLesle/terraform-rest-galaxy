@@ -50,7 +50,7 @@ variable "azure_activity_log_alerts" {
         }
       }
   EOT
-  default = {}
+  default     = {}
 }
 
 locals {

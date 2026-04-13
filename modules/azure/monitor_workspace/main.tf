@@ -15,10 +15,27 @@ locals {
   )
 }
 
+data "rest_resource" "provider_check" {
+  id = "/subscriptions/${var.subscription_id}/providers/Microsoft.Monitor"
+
+  query = {
+    api-version = ["2025-04-01"]
+  }
+
+  output_attrs = toset(["registrationState"])
+}
+
 resource "rest_resource" "monitor_workspace" {
   path            = local.amw_path
   create_method   = "PUT"
   check_existance = var.check_existance
+
+  lifecycle {
+    precondition {
+      condition     = data.rest_resource.provider_check.output.registrationState == "Registered"
+      error_message = "Resource provider Microsoft.Monitor is not registered on subscription ${var.subscription_id}. Add to your config YAML:\n\n  azure_resource_provider_registrations:\n    monitor:\n      resource_provider_namespace: Microsoft.Monitor"
+    }
+  }
 
   query = {
     api-version = [local.api_version]

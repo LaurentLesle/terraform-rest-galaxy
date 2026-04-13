@@ -1,0 +1,29 @@
+default_location: westeurope
+
+terraform_backend:
+  type: local
+  path: log_analytics_workspace_complete.tfstate
+
+azure_resource_groups:
+  example:
+    resource_group_name: rg-law-complete
+    location: westeurope
+    tags:
+      environment: dev
+      scenario: law-complete
+
+azure_log_analytics_workspaces:
+  complete:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: ref:azure_resource_groups.example.resource_group_name
+    workspace_name: law-example-complete
+    location: ref:azure_resource_groups.example.location
+    sku_name: PerGB2018
+    retention_in_days: 90
+    public_network_access_for_ingestion: Enabled
+    public_network_access_for_query: Enabled
+    features_disable_local_auth: true
+    features_enable_data_export: false
+    features_enable_log_access_using_only_resource_permissions: true
+    identity_type: SystemAssigned
+    tags: ref:azure_resource_groups.example.tags

@@ -24,6 +24,7 @@ run "plan_diagnostic_setting" {
   }
 
   variables {
+    subscription_id            = "00000000-0000-0000-0000-000000000000"
     resource_id                = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/test-rg/providers/Microsoft.OperationalInsights/workspaces/test-law"
     diagnostic_setting_name    = "diag-test"
     log_analytics_workspace_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/test-rg/providers/Microsoft.OperationalInsights/workspaces/central-law"

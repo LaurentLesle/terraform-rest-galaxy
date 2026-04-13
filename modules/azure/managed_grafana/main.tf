@@ -77,10 +77,28 @@ locals {
   )
 }
 
+data "rest_resource" "provider_check" {
+  id = "/subscriptions/${var.subscription_id}/providers/Microsoft.Dashboard"
+
+  query = {
+    api-version = ["2025-04-01"]
+  }
+
+  output_attrs = toset(["registrationState"])
+}
+
 resource "rest_resource" "managed_grafana" {
   path            = local.grafana_path
   create_method   = "PUT"
   check_existance = var.check_existance
+
+  lifecycle {
+    precondition {
+      condition     = data.rest_resource.provider_check.output.registrationState == "Registered"
+      error_message = "Resource provider Microsoft.Dashboard is not registered on subscription ${var.subscription_id}. Add to your config YAML:\n\n  azure_resource_provider_registrations:\n    dashboard:\n      resource_provider_namespace: Microsoft.Dashboard"
+    }
+  }
+
 
   query = {
     api-version = [local.api_version]

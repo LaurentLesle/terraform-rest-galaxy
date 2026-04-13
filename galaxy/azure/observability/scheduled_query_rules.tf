@@ -2,14 +2,14 @@
 
 variable "azure_scheduled_query_rules" {
   type = map(object({
-    subscription_id                           = optional(string, null)
-    resource_group_name                       = string
-    rule_name                                 = optional(string, null)
-    location                                  = optional(string, null)
-    kind                                      = optional(string, "LogAlert")
-    identity_type                             = optional(string, null)
-    identity_user_assigned_identity_ids       = optional(list(string), null)
-    scopes                                    = list(string)
+    subscription_id                     = optional(string, null)
+    resource_group_name                 = string
+    rule_name                           = optional(string, null)
+    location                            = optional(string, null)
+    kind                                = optional(string, "LogAlert")
+    identity_type                       = optional(string, null)
+    identity_user_assigned_identity_ids = optional(list(string), null)
+    scopes                              = list(string)
     criteria = object({
       all_of = list(object({
         query                 = optional(string, null)
@@ -29,15 +29,15 @@ variable "azure_scheduled_query_rules" {
         })), null)
       }))
     })
-    description                               = optional(string, null)
-    display_name                              = optional(string, null)
-    severity                                  = optional(number, null)
-    enabled                                   = optional(bool, true)
-    evaluation_frequency                      = optional(string, null)
-    window_size                               = optional(string, null)
-    override_query_time_range                 = optional(string, null)
-    target_resource_types                     = optional(list(string), null)
-    mute_actions_duration                     = optional(string, null)
+    description               = optional(string, null)
+    display_name              = optional(string, null)
+    severity                  = optional(number, null)
+    enabled                   = optional(bool, true)
+    evaluation_frequency      = optional(string, null)
+    window_size               = optional(string, null)
+    override_query_time_range = optional(string, null)
+    target_resource_types     = optional(list(string), null)
+    mute_actions_duration     = optional(string, null)
     actions = optional(object({
       action_groups     = optional(list(string), [])
       custom_properties = optional(map(string), null)
@@ -71,7 +71,7 @@ variable "azure_scheduled_query_rules" {
         }
       }
   EOT
-  default = {}
+  default     = {}
 }
 
 locals {

@@ -38,7 +38,7 @@ variable "azure_application_insights" {
         }
       }
   EOT
-  default = {}
+  default     = {}
 }
 
 locals {

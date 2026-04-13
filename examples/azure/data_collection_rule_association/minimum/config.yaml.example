@@ -1,0 +1,10 @@
+default_location: westeurope
+
+terraform_backend:
+  type: local
+  path: data_collection_rule_association_minimum.tfstate
+
+azure_data_collection_rule_associations:
+  minimum:
+    resource_id: /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-example/providers/Microsoft.Compute/virtualMachines/vm-example
+    data_collection_rule_id: /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-dcr/providers/Microsoft.Insights/dataCollectionRules/dcr-example

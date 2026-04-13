@@ -3,6 +3,7 @@
 
 variable "azure_data_collection_rule_associations" {
   type = map(object({
+    subscription_id             = optional(string, null)
     resource_id                 = string
     association_name            = optional(string, null)
     description                 = optional(string, null)
@@ -29,6 +30,7 @@ module "azure_data_collection_rule_associations" {
     module.azure_data_collection_endpoints,
   ]
 
+  subscription_id             = try(each.value.subscription_id, var.subscription_id)
   resource_id                 = each.value.resource_id
   association_name            = try(each.value.association_name, each.key)
   description                 = try(each.value.description, null)

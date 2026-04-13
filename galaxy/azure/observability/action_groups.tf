@@ -2,13 +2,13 @@
 
 variable "azure_action_groups" {
   type = map(object({
-    subscription_id              = optional(string, null)
-    resource_group_name          = string
-    action_group_name            = optional(string, null)
-    location                     = optional(string, "global")
-    short_name                   = string
-    enabled                      = optional(bool, true)
-    tags                         = optional(map(string), null)
+    subscription_id     = optional(string, null)
+    resource_group_name = string
+    action_group_name   = optional(string, null)
+    location            = optional(string, "global")
+    short_name          = string
+    enabled             = optional(bool, true)
+    tags                = optional(map(string), null)
     email_receivers = optional(list(object({
       name                    = string
       email_address           = string
@@ -95,7 +95,7 @@ variable "azure_action_groups" {
         }
       }
   EOT
-  default = {}
+  default     = {}
 }
 
 locals {

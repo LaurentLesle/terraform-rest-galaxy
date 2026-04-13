@@ -1,7 +1,7 @@
 terraform {
   required_providers {
     rest = {
-      source  = "LaurentLesle/rest"
+      source = "LaurentLesle/rest"
     }
   }
 }

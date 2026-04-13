@@ -81,12 +81,12 @@ variable "scopes" {
 variable "criteria" {
   type = object({
     all_of = list(object({
-      query                   = optional(string, null)
-      time_aggregation        = optional(string, null)
-      metric_measure_column   = optional(string, null)
-      resource_id_column      = optional(string, null)
-      operator                = optional(string, null)
-      threshold               = optional(number, null)
+      query                 = optional(string, null)
+      time_aggregation      = optional(string, null)
+      metric_measure_column = optional(string, null)
+      resource_id_column    = optional(string, null)
+      operator              = optional(string, null)
+      threshold             = optional(number, null)
       failing_periods = optional(object({
         number_of_evaluation_periods = number
         min_failing_periods_to_alert = number
@@ -202,8 +202,8 @@ variable "auto_mitigate" {
 
 variable "resolve_configuration" {
   type = object({
-    auto_resolved    = optional(bool, null)
-    time_to_resolve  = optional(string, null)
+    auto_resolved   = optional(bool, null)
+    time_to_resolve = optional(string, null)
   })
   default     = null
   description = "Configuration for automatically resolving the alert."

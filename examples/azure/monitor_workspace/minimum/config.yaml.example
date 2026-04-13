@@ -1,0 +1,17 @@
+default_location: westeurope
+
+terraform_backend:
+  type: local
+  path: monitor_workspace_minimum.tfstate
+
+azure_resource_groups:
+  example:
+    resource_group_name: rg-monitor-workspace
+    location: westeurope
+
+azure_monitor_workspaces:
+  minimum:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: ref:azure_resource_groups.example.resource_group_name
+    monitor_workspace_name: amw-example
+    location: ref:azure_resource_groups.example.location

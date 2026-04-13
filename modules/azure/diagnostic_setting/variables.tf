@@ -11,6 +11,11 @@ variable "check_existance" {
   description = "Check whether the resource already exists before creating it."
 }
 
+variable "subscription_id" {
+  type        = string
+  description = "The Azure subscription ID. Used to verify resource provider registration."
+}
+
 # ── Path parameters ────────────────────────────────────────────────────────
 
 variable "resource_id" {

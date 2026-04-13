@@ -1,0 +1,35 @@
+default_location: westeurope
+
+terraform_backend:
+  type: local
+  path: diagnostic_setting_complete.tfstate
+
+azure_resource_groups:
+  example:
+    resource_group_name: rg-observability
+    location: westeurope
+    tags:
+      environment: dev
+      scenario: diag-complete
+
+azure_log_analytics_workspaces:
+  central:
+    resource_group_name: ref:azure_resource_groups.example.resource_group_name
+    workspace_name: law-central
+    location: ref:azure_resource_groups.example.location
+    tags: ref:azure_resource_groups.example.tags
+
+azure_diagnostic_settings:
+  complete:
+    resource_id: /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-target/providers/Microsoft.KeyVault/vaults/kv-example
+    diagnostic_setting_name: diag-kv-complete
+    log_analytics_workspace_id: ref:azure_log_analytics_workspaces.central.id
+    log_analytics_destination_type: Dedicated
+    logs:
+      - category_group: allLogs
+        enabled: true
+      - category_group: audit
+        enabled: true
+    metrics:
+      - category: AllMetrics
+        enabled: true

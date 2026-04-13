@@ -21,6 +21,16 @@ locals {
   }
 }
 
+data "rest_resource" "provider_check" {
+  id = "/subscriptions/${var.subscription_id}/providers/Microsoft.Insights"
+
+  query = {
+    api-version = ["2025-04-01"]
+  }
+
+  output_attrs = toset(["registrationState"])
+}
+
 resource "rest_resource" "data_collection_rule_association" {
   path            = local.dcra_path
   create_method   = "PUT"
@@ -39,6 +49,11 @@ resource "rest_resource" "data_collection_rule_association" {
   # PUT is synchronous (200/201) — no polling needed.
 
   lifecycle {
+    precondition {
+      condition     = data.rest_resource.provider_check.output.registrationState == "Registered"
+      error_message = "Resource provider Microsoft.Insights is not registered on subscription ${var.subscription_id}. Add to your config YAML:\n\n  azure_resource_provider_registrations:\n    insights:\n      resource_provider_namespace: Microsoft.Insights"
+    }
+
     precondition {
       condition     = !(var.data_collection_rule_id != null && var.data_collection_endpoint_id != null)
       error_message = "data_collection_rule_id and data_collection_endpoint_id are mutually exclusive. Specify only one."

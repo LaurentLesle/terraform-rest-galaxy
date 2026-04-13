@@ -1,0 +1,38 @@
+default_location: westeurope
+
+terraform_backend:
+  type: local
+  path: action_group_complete.tfstate
+
+azure_resource_groups:
+  example:
+    resource_group_name: rg-observability
+    location: westeurope
+    tags:
+      environment: dev
+      scenario: action-group-complete
+
+azure_action_groups:
+  complete:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: ref:azure_resource_groups.example.resource_group_name
+    action_group_name: ag-ops-complete
+    short_name: ops
+    enabled: true
+    tags: ref:azure_resource_groups.example.tags
+    email_receivers:
+      - name: ops-email
+        email_address: ops@example.com
+        use_common_alert_schema: true
+    sms_receivers:
+      - name: ops-sms
+        country_code: "1"
+        phone_number: "5551234567"
+    webhook_receivers:
+      - name: teams-webhook
+        service_uri: https://example.webhook.office.com/webhookb2/example
+        use_common_alert_schema: true
+    arm_role_receivers:
+      - name: owner-role
+        role_id: 8e3af657-a8ff-443c-a75c-2fe8c4bcb635
+        use_common_alert_schema: true

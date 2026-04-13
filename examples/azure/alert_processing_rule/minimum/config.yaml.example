@@ -1,0 +1,21 @@
+default_location: westeurope
+
+terraform_backend:
+  type: local
+  path: alert_processing_rule_minimum.tfstate
+
+azure_resource_groups:
+  example:
+    resource_group_name: rg-observability
+    location: westeurope
+
+azure_alert_processing_rules:
+  minimum:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: ref:azure_resource_groups.example.resource_group_name
+    alert_processing_rule_name: apr-suppress-maintenance
+    location: ref:azure_resource_groups.example.location
+    scopes:
+      - /subscriptions/00000000-0000-0000-0000-000000000000
+    actions:
+      - action_type: RemoveAllActionGroups

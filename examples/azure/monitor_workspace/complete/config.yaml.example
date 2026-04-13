@@ -1,0 +1,21 @@
+default_location: westeurope
+
+terraform_backend:
+  type: local
+  path: monitor_workspace_complete.tfstate
+
+azure_resource_groups:
+  example:
+    resource_group_name: rg-monitor-workspace-complete
+    location: westeurope
+    tags:
+      environment: dev
+      scenario: monitor-workspace-complete
+
+azure_monitor_workspaces:
+  complete:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: ref:azure_resource_groups.example.resource_group_name
+    monitor_workspace_name: amw-example-complete
+    location: ref:azure_resource_groups.example.location
+    tags: ref:azure_resource_groups.example.tags

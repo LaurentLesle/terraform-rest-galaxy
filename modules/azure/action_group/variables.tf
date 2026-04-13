@@ -64,8 +64,8 @@ variable "enabled" {
 
 variable "email_receivers" {
   type = list(object({
-    name                  = string
-    email_address         = string
+    name                    = string
+    email_address           = string
     use_common_alert_schema = optional(bool, true)
   }))
   default     = []

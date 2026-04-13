@@ -5,6 +5,7 @@
 
 variable "azure_diagnostic_settings" {
   type = map(object({
+    subscription_id                 = optional(string, null)
     resource_id                     = string
     diagnostic_setting_name         = optional(string, null)
     log_analytics_workspace_id      = optional(string, null)
@@ -46,7 +47,7 @@ variable "azure_diagnostic_settings" {
         }
       }
   EOT
-  default = {}
+  default     = {}
 }
 
 locals {
@@ -69,6 +70,7 @@ module "azure_diagnostic_settings" {
     module.azure_resource_provider_registrations,
   ]
 
+  subscription_id                 = try(each.value.subscription_id, var.subscription_id)
   resource_id                     = each.value.resource_id
   diagnostic_setting_name         = try(each.value.diagnostic_setting_name, each.key)
   log_analytics_workspace_id      = try(each.value.log_analytics_workspace_id, null)

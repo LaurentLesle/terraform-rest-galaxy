@@ -1,0 +1,17 @@
+default_location: westeurope
+
+terraform_backend:
+  type: local
+  path: managed_grafana_minimum.tfstate
+
+azure_resource_groups:
+  example:
+    resource_group_name: rg-grafana
+    location: westeurope
+
+azure_managed_grafanas:
+  minimum:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: ref:azure_resource_groups.example.resource_group_name
+    grafana_name: grafana-example
+    location: ref:azure_resource_groups.example.location

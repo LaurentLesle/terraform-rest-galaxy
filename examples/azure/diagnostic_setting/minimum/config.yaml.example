@@ -1,0 +1,25 @@
+default_location: westeurope
+
+terraform_backend:
+  type: local
+  path: diagnostic_setting_minimum.tfstate
+
+azure_resource_groups:
+  example:
+    resource_group_name: rg-observability
+    location: westeurope
+
+azure_log_analytics_workspaces:
+  example:
+    resource_group_name: ref:azure_resource_groups.example.resource_group_name
+    workspace_name: law-example
+    location: ref:azure_resource_groups.example.location
+
+azure_diagnostic_settings:
+  minimum:
+    resource_id: /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-target/providers/Microsoft.KeyVault/vaults/kv-example
+    diagnostic_setting_name: diag-kv-to-law
+    log_analytics_workspace_id: ref:azure_log_analytics_workspaces.example.id
+    logs:
+      - category_group: allLogs
+        enabled: true

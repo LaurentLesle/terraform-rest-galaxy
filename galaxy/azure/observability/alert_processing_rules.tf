@@ -51,7 +51,7 @@ variable "azure_alert_processing_rules" {
         }
       }
   EOT
-  default = {}
+  default     = {}
 }
 
 locals {

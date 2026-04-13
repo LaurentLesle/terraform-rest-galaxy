@@ -1,0 +1,51 @@
+default_location: westeurope
+
+terraform_backend:
+  type: local
+  path: alert_processing_rule_complete.tfstate
+
+azure_resource_groups:
+  example:
+    resource_group_name: rg-observability
+    location: westeurope
+    tags:
+      environment: dev
+      scenario: apr-complete
+
+azure_action_groups:
+  example:
+    resource_group_name: ref:azure_resource_groups.example.resource_group_name
+    action_group_name: ag-ops
+    short_name: ops
+    email_receivers:
+      - name: ops-email
+        email_address: ops@example.com
+
+azure_alert_processing_rules:
+  complete:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: ref:azure_resource_groups.example.resource_group_name
+    alert_processing_rule_name: apr-maintenance-complete
+    location: ref:azure_resource_groups.example.location
+    description: "Suppress all alerts during weekend maintenance windows"
+    enabled: true
+    scopes:
+      - /subscriptions/00000000-0000-0000-0000-000000000000
+    actions:
+      - action_type: RemoveAllActionGroups
+    conditions:
+      - field: Severity
+        operator: Equals
+        values:
+          - Sev3
+          - Sev4
+    schedule:
+      time_zone: UTC
+      recurrences:
+        - recurrence_type: Weekly
+          days_of_week:
+            - Saturday
+            - Sunday
+          start_time: "00:00:00"
+          end_time: "23:59:59"
+    tags: ref:azure_resource_groups.example.tags
