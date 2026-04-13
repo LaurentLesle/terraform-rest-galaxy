@@ -10,8 +10,19 @@ locals {
 
   body = {
     properties = {
-      displayName                 = var.display_name
-      tenantId                    = var.tenant_id
+      displayName = var.display_name
+      tenantId    = var.tenant_id
+    }
+  }
+
+  # billingManagementState and provisioningManagementState are sent in the PUT
+  # but Azure transitions them server-side the moment the request lands
+  # (Active → Revoked, Pending → Revoked) until the target tenant accepts.
+  # They ARE returned in the GET — but with different values, so write_only_attrs
+  # doesn't help (it only covers absent attributes). ephemeral_body merges into
+  # the PUT request but is never stored in state, avoiding the comparison entirely.
+  ephemeral_body = {
+    properties = {
       billingManagementState      = var.billing_management_state
       provisioningManagementState = var.provisioning_management_state
     }
@@ -64,7 +75,8 @@ resource "rest_resource" "billing_associated_tenant" {
     api-version = [local.api_version]
   }
 
-  body = local.body
+  body           = local.body
+  ephemeral_body = local.ephemeral_body
 
   output_attrs = toset([
     "properties.displayName",
