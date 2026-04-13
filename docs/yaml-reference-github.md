@@ -35,6 +35,40 @@ github_environment_secrets:
 
 ---
 
+### `github_environment_variables`
+
+**API version:** `GitHub REST API v2022-11-28`
+
+Map of GitHub Actions variables scoped to a specific deployment environment.
+These are plain-text variables (not secrets) accessible in workflows via
+${"$"}{{ vars.NAME }} when the job references the environment.
+
+Requires var.github_token with repo scope.
+
+#### Attributes
+
+| Name | Type | Required | Default | Description |
+|------|------|:--------:|---------|-------------|
+| `owner` | `string` | yes | — |  |
+| `repo` | `string` | yes | — |  |
+| `environment_name` | `string` | yes | — |  |
+| `name` | `string` | yes | — |  |
+| `value` | `string` | yes | — |  |
+
+#### YAML Example
+
+```yaml
+github_environment_variables:
+  staging_api_url:
+    owner: "my-org"
+    repo: "acme-demo-app"
+    environment_name: "staging"
+    name: "API_URL"
+    value: "https://staging.acme.example.com"
+```
+
+---
+
 ### `github_environments`
 
 **API version:** `GitHub REST API v2022-11-28`
@@ -143,6 +177,38 @@ github_organization_secrets:
 
 ---
 
+### `github_organization_variables`
+
+**API version:** `GitHub REST API v2022-11-28`
+
+Map of GitHub Actions variables scoped to an entire organization. Shared
+across all repositories selected by var.visibility.
+
+Requires var.github_token with admin:org scope.
+
+#### Attributes
+
+| Name | Type | Required | Default | Description |
+|------|------|:--------:|---------|-------------|
+| `organization` | `string` | yes | — |  |
+| `name` | `string` | yes | — |  |
+| `value` | `string` | yes | — |  |
+| `visibility` | `string` | yes | — |  |
+| `selected_repository_ids` | `list(number)` | no | `null` |  |
+
+#### YAML Example
+
+```yaml
+github_organization_variables:
+  default_region:
+    organization: "my-org"
+    name: "DEFAULT_REGION"
+    value: "us-east-1"
+    visibility: "all"
+```
+
+---
+
 ### `github_repositories`
 
 **API version:** `GitHub REST API v2022-11-28`
@@ -185,6 +251,38 @@ github_repositories:
     description: "Demo app managed by terraform-rest-galaxy"
     visibility: "private"
     auto_init: true
+```
+
+---
+
+### `github_repository_action_variables`
+
+**API version:** `GitHub REST API v2022-11-28`
+
+Map of GitHub Actions repository variables to create via the GitHub REST API.
+These are plain-text variables (not secrets) accessible in workflows via
+${"$"}{{ vars.NAME }}.
+
+Requires var.github_token with repo scope.
+
+#### Attributes
+
+| Name | Type | Required | Default | Description |
+|------|------|:--------:|---------|-------------|
+| `owner` | `string` | yes | — |  |
+| `repo` | `string` | yes | — |  |
+| `name` | `string` | yes | — |  |
+| `value` | `string` | yes | — |  |
+
+#### YAML Example
+
+```yaml
+github_repository_action_variables:
+  azure_client_id:
+    owner: "my-org"
+    repo: "my-repo"
+    name: "AZURE_CLIENT_ID"
+    value: "00000000-0000-0000-0000-000000000000"
 ```
 
 ---
