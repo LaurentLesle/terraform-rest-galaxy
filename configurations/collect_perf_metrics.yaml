@@ -1,0 +1,116 @@
+# ── Performance Counter Collection ─────────────────────────────────────────────
+# Comprehensive performance counter collection at multiple sampling frequencies.
+# High-frequency counters (10s): CPU utilization, memory available.
+# Medium-frequency counters (30s): disk I/O, network bytes.
+# Low-frequency counters (60s): disk space, process count, system calls.
+# Dual destination: Azure Monitor Workspace (Prometheus/AMW) + Log Analytics.
+
+terraform_backend:
+  type: local
+  path: collect_perf_metrics.tfstate
+
+default_location: westeurope
+
+azure_resource_groups:
+  perf:
+    resource_group_name: rg-collect-perf-metrics
+    location: westeurope
+    tags:
+      environment: production
+      scenario: perf-collection
+
+azure_monitor_workspaces:
+  perf:
+    resource_group_name: ref:azure_resource_groups.perf.resource_group_name
+    monitor_workspace_name: amw-collect-perf
+    location: ref:azure_resource_groups.perf.location
+    tags: ref:azure_resource_groups.perf.tags
+
+azure_log_analytics_workspaces:
+  perf:
+    resource_group_name: ref:azure_resource_groups.perf.resource_group_name
+    workspace_name: law-collect-perf
+    location: ref:azure_resource_groups.perf.location
+    sku_name: PerGB2018
+    retention_in_days: 90
+    features_disable_local_auth: true
+    tags: ref:azure_resource_groups.perf.tags
+
+azure_data_collection_endpoints:
+  perf:
+    resource_group_name: ref:azure_resource_groups.perf.resource_group_name
+    data_collection_endpoint_name: dce-collect-perf
+    location: ref:azure_resource_groups.perf.location
+    public_network_access: Enabled
+    tags: ref:azure_resource_groups.perf.tags
+
+azure_data_collection_rules:
+  perf:
+    resource_group_name: ref:azure_resource_groups.perf.resource_group_name
+    data_collection_rule_name: dcr-collect-perf-metrics
+    location: ref:azure_resource_groups.perf.location
+    description: Comprehensive performance counter collection at multiple sampling rates to AMW and LAW
+    data_collection_endpoint_id: ref:azure_data_collection_endpoints.perf.id
+    destinations:
+      logAnalytics:
+        - workspaceResourceId: ref:azure_log_analytics_workspaces.perf.id
+          name: law-destination
+      azureMonitorMetrics:
+        name: amw-destination
+    data_flows:
+      - streams:
+          - Microsoft-InsightsMetrics
+        destinations:
+          - amw-destination
+      - streams:
+          - Microsoft-Perf
+        destinations:
+          - law-destination
+    data_sources:
+      performanceCounters:
+        # High-frequency counters (10s): CPU and memory
+        - name: perf-cpu-memory-high
+          streams:
+            - Microsoft-Perf
+            - Microsoft-InsightsMetrics
+          samplingFrequencyInSeconds: 10
+          counterSpecifiers:
+            - "\\Processor Information(_Total)\\% Processor Time"
+            - "\\Processor Information(_Total)\\% User Time"
+            - "\\Processor Information(_Total)\\% Privileged Time"
+            - "\\Processor Information(_Total)\\Processor Frequency"
+            - "\\Memory\\Available Bytes"
+            - "\\Memory\\% Committed Bytes In Use"
+            - "\\Memory\\Cache Bytes"
+            - "\\Memory\\Pool Paged Bytes"
+            - "\\Memory\\Pool Nonpaged Bytes"
+        # Medium-frequency counters (30s): disk I/O and network
+        - name: perf-disk-network-medium
+          streams:
+            - Microsoft-Perf
+          samplingFrequencyInSeconds: 30
+          counterSpecifiers:
+            - "\\PhysicalDisk(_Total)\\Disk Read Bytes/sec"
+            - "\\PhysicalDisk(_Total)\\Disk Write Bytes/sec"
+            - "\\PhysicalDisk(_Total)\\Disk Reads/sec"
+            - "\\PhysicalDisk(_Total)\\Disk Writes/sec"
+            - "\\PhysicalDisk(_Total)\\Avg. Disk Queue Length"
+            - "\\Network Interface(*)\\Bytes Received/sec"
+            - "\\Network Interface(*)\\Bytes Sent/sec"
+            - "\\Network Interface(*)\\Packets Received Errors"
+            - "\\Network Interface(*)\\Packets Outbound Errors"
+        # Low-frequency counters (60s): disk space, process count, system calls
+        - name: perf-system-low
+          streams:
+            - Microsoft-Perf
+          samplingFrequencyInSeconds: 60
+          counterSpecifiers:
+            - "\\LogicalDisk(_Total)\\% Free Space"
+            - "\\LogicalDisk(_Total)\\Free Megabytes"
+            - "\\LogicalDisk(*)\\% Free Space"
+            - "\\System\\Processes"
+            - "\\System\\System Calls/sec"
+            - "\\System\\Context Switches/sec"
+            - "\\Process(_Total)\\Handle Count"
+            - "\\Process(_Total)\\Thread Count"
+    tags: ref:azure_resource_groups.perf.tags

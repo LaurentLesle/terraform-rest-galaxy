@@ -1,0 +1,38 @@
+default_location: westeurope
+
+terraform_backend:
+  type: local
+  path: managed_grafana_complete.tfstate
+
+azure_resource_groups:
+  example:
+    resource_group_name: rg-grafana
+    location: westeurope
+    tags:
+      environment: dev
+      scenario: grafana-complete
+
+azure_monitor_workspaces:
+  example:
+    resource_group_name: ref:azure_resource_groups.example.resource_group_name
+    workspace_name: amw-grafana
+    location: ref:azure_resource_groups.example.location
+    tags: ref:azure_resource_groups.example.tags
+
+azure_managed_grafanas:
+  complete:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: ref:azure_resource_groups.example.resource_group_name
+    grafana_name: grafana-example-complete
+    location: ref:azure_resource_groups.example.location
+    sku_name: Standard
+    public_network_access: Enabled
+    zone_redundancy: Disabled
+    api_key: Disabled
+    deterministic_outbound_ip: Disabled
+    azure_monitor_workspace_integrations:
+      - azure_monitor_workspace_resource_id: ref:azure_monitor_workspaces.example.id
+    grafana_configurations_snapshots_external_enabled: false
+    grafana_configurations_users_viewers_can_edit: false
+    grafana_configurations_users_editors_can_admin: false
+    tags: ref:azure_resource_groups.example.tags

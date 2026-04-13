@@ -1,0 +1,68 @@
+terraform {
+  required_providers {
+    rest = {
+      source  = "LaurentLesle/rest"
+      version = "~> 1.0"
+    }
+  }
+}
+
+provider "rest" {
+  base_url = "https://login.microsoftonline.com"
+  alias    = "access_token"
+}
+
+resource "rest_operation" "access_token" {
+  count  = var.access_token == null ? 1 : 0
+  path   = "/${var.tenant_id != null ? var.tenant_id : ""}/oauth2/v2.0/token"
+  method = "POST"
+  header = {
+    Accept       = "application/json"
+    Content-Type = "application/x-www-form-urlencoded"
+  }
+  body = {
+    client_assertion      = var.id_token
+    client_assertion_type = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
+    client_id             = var.client_id
+    grant_type            = "client_credentials"
+    scope                 = "https://management.azure.com/.default"
+  }
+  provider = rest.access_token
+}
+
+locals {
+  azure_token = coalesce(
+    var.access_token,
+    try(rest_operation.access_token[0].output["access_token"], "")
+  )
+}
+
+provider "rest" {
+  base_url = "https://management.azure.com"
+  security = {
+    http = {
+      token = {
+        token = local.azure_token
+      }
+    }
+  }
+}
+
+module "root" {
+  source = "../../../../"
+
+  azure_action_groups = {
+    complete = {
+      subscription_id     = var.subscription_id
+      resource_group_name = var.resource_group_name
+      action_group_name   = var.action_group_name
+      short_name          = var.short_name
+      enabled             = var.enabled
+      tags                = var.tags
+      email_receivers     = var.email_receivers
+      sms_receivers       = var.sms_receivers
+      webhook_receivers   = var.webhook_receivers
+      arm_role_receivers  = var.arm_role_receivers
+    }
+  }
+}

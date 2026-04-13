@@ -82,6 +82,12 @@ locals {
     azure_redis_enterprise_clusters       = local._rec_ctx
     azure_email_communication_services    = local._ecs_ctx
     azure_app_service_domains             = local._asd_ctx
+    # Observability L1 resources
+    azure_monitor_workspaces          = local._amw_ctx
+    azure_log_analytics_workspaces    = local._law_ctx
+    azure_data_collection_endpoints   = local._dce_ctx
+    azure_monitor_private_link_scopes = local._ampls_ctx
+    azure_action_groups               = local._ag_ctx
     # K8s L0 resources — available for cross-domain ref: resolution
     k8s_kind_clusters = local._k8s_kind_ctx
     # Entra ID L0 resources — available for cross-domain ref: resolution
@@ -92,27 +98,37 @@ locals {
 
   # ── Layer 2: + all L2 resources ────────────────────────────────────────
   _ctx_l2 = merge(local._ctx_l1, {
-    azure_foundry_accounts                    = local._fa_ctx
-    azure_arc_connected_clusters              = local._arc_cc_ctx
-    azure_key_vault_keys                      = local._kvk_ctx
-    azure_resource_provider_features          = local._rpf_ctx
-    azure_virtual_hubs                        = local._vhub_ctx
-    azure_virtual_network_gateways            = local._vngw_ctx
-    azure_load_balancers                      = local._lb_ctx
-    azure_network_interfaces                  = local._nic_ctx
-    azure_express_route_circuits              = local._erc_ctx
-    azure_redis_enterprise_databases          = local._red_ctx
-    azure_private_dns_zones                   = local._pdz_ctx
-    azure_dns_resolvers                       = local._dnspr_ctx
-    azure_container_registries                = local._acr_ctx
+    # Application Insights resolves at L1 (needs LAW id) and is exposed at L2
+    azure_application_insights     = local._appi_ctx
+    azure_managed_grafanas           = local._grafana_ctx
+    azure_foundry_accounts           = local._fa_ctx
+    azure_arc_connected_clusters     = local._arc_cc_ctx
+    azure_key_vault_keys             = local._kvk_ctx
+    azure_resource_provider_features = local._rpf_ctx
+    azure_virtual_hubs               = local._vhub_ctx
+    azure_virtual_network_gateways   = local._vngw_ctx
+    azure_load_balancers             = local._lb_ctx
+    azure_network_interfaces         = local._nic_ctx
+    azure_express_route_circuits     = local._erc_ctx
+    azure_redis_enterprise_databases = local._red_ctx
+    azure_private_dns_zones          = local._pdz_ctx
+    azure_dns_resolvers              = local._dnspr_ctx
+    azure_container_registries       = local._acr_ctx
+    # azure_monitor_private_link_scoped_resources and azure_private_dns_zone_virtual_network_links
+    # resolve at L2 but are terminal (nothing refs their outputs — do not add to context to avoid cycles)
     azure_email_communication_service_domains = local._ecsd_ctx
     azure_dns_zones                           = local._dz_ctx
   })
 
   # ── Layer 3: + resources that depend on L2 (virtual_hubs, storage, etc.)
   _ctx_l3 = merge(local._ctx_l2, {
+    azure_metric_alerts           = local._ma_ctx
+    azure_scheduled_query_rules   = local._sqr_ctx
+    azure_activity_log_alerts     = local._ala_ctx
+    azure_alert_processing_rules  = local._apr_ctx
     azure_role_assignments                    = local._ra_ctx
     azure_storage_accounts                    = local._sa_ctx
+    azure_data_collection_rules               = local._dcr_ctx
     azure_firewalls                           = local._afw_ctx
     azure_virtual_network_gateway_connections = local._conn_ctx
     azure_vpn_gateways                        = local._vpngw_ctx

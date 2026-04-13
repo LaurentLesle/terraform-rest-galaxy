@@ -1,0 +1,26 @@
+default_location: westeurope
+
+terraform_backend:
+  type: local
+  path: application_insights_minimum.tfstate
+
+azure_resource_groups:
+  example:
+    resource_group_name: rg-appi
+    location: westeurope
+
+azure_log_analytics_workspaces:
+  example:
+    resource_group_name: ref:azure_resource_groups.example.resource_group_name
+    workspace_name: law-appi-example
+    location: ref:azure_resource_groups.example.location
+
+azure_application_insights:
+  minimum:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: ref:azure_resource_groups.example.resource_group_name
+    application_insights_name: appi-example
+    location: ref:azure_resource_groups.example.location
+    kind: web
+    application_type: web
+    workspace_resource_id: ref:azure_log_analytics_workspaces.example.id

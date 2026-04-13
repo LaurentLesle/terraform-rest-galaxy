@@ -1,0 +1,29 @@
+# Azure Monitor Private Link Scope — complete configuration example
+# Demonstrates all available properties including access mode exclusions.
+# Drive via: TF_VAR_config_file=configurations/my.yaml terraform -chdir=.build apply
+
+default_location: westeurope
+
+azure_resource_groups:
+  obs:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: rg-ampls-complete
+    location: westeurope
+    tags:
+      environment: dev
+      scenario: ampls-complete
+
+azure_monitor_private_link_scopes:
+  complete:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: ref:azure_resource_groups.obs.resource_group_name
+    scope_name: ampls-complete-example
+    location: ref:azure_resource_groups.obs.location
+    ingestion_access_mode: PrivateOnly
+    query_access_mode: PrivateOnly
+    access_mode_exclusions:
+      - privateEndpointConnectionName: pe-connection-1
+        privateEndpointResourceId: /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-ampls-complete/providers/Microsoft.Network/privateEndpoints/pe-ampls-1
+        ingestionAccessMode: Open
+        queryAccessMode: Open
+    tags: ref:azure_resource_groups.obs.tags

@@ -1,0 +1,129 @@
+# ── Linux Syslog Collection ─────────────────────────────────────────────────────
+# Linux syslog collection with per-facility log level filtering.
+# Facilities: kern, daemon, auth, syslog, user, cron — each at appropriate levels.
+# Destination: Log Analytics Workspace.
+
+terraform_backend:
+  type: local
+  path: collect_linux_syslog.tfstate
+
+default_location: westeurope
+
+azure_resource_groups:
+  syslog:
+    resource_group_name: rg-collect-linux-syslog
+    location: westeurope
+    tags:
+      environment: production
+      scenario: linux-syslog-collection
+
+azure_log_analytics_workspaces:
+  syslog:
+    resource_group_name: ref:azure_resource_groups.syslog.resource_group_name
+    workspace_name: law-collect-syslog
+    location: ref:azure_resource_groups.syslog.location
+    sku_name: PerGB2018
+    retention_in_days: 90
+    features_disable_local_auth: true
+    tags: ref:azure_resource_groups.syslog.tags
+
+azure_data_collection_endpoints:
+  syslog:
+    resource_group_name: ref:azure_resource_groups.syslog.resource_group_name
+    data_collection_endpoint_name: dce-collect-syslog
+    location: ref:azure_resource_groups.syslog.location
+    public_network_access: Enabled
+    tags: ref:azure_resource_groups.syslog.tags
+
+azure_data_collection_rules:
+  syslog:
+    resource_group_name: ref:azure_resource_groups.syslog.resource_group_name
+    data_collection_rule_name: dcr-collect-linux-syslog
+    location: ref:azure_resource_groups.syslog.location
+    kind: Linux
+    description: Linux syslog collection with per-facility log level filtering to Log Analytics
+    data_collection_endpoint_id: ref:azure_data_collection_endpoints.syslog.id
+    destinations:
+      logAnalytics:
+        - workspaceResourceId: ref:azure_log_analytics_workspaces.syslog.id
+          name: law-destination
+    data_flows:
+      - streams:
+          - Microsoft-Syslog
+        destinations:
+          - law-destination
+    data_sources:
+      syslog:
+        # kern: kernel messages — Warning through Emergency
+        - name: syslog-kern
+          streams:
+            - Microsoft-Syslog
+          facilityNames:
+            - kern
+          logLevels:
+            - Warning
+            - Error
+            - Critical
+            - Alert
+            - Emergency
+        # daemon: system daemons — Error and above
+        - name: syslog-daemon
+          streams:
+            - Microsoft-Syslog
+          facilityNames:
+            - daemon
+          logLevels:
+            - Error
+            - Critical
+            - Alert
+            - Emergency
+        # auth: authentication messages — Warning and above (security events)
+        - name: syslog-auth
+          streams:
+            - Microsoft-Syslog
+          facilityNames:
+            - auth
+          logLevels:
+            - Warning
+            - Error
+            - Critical
+            - Alert
+            - Emergency
+        # syslog: syslogd internal messages — Info and above
+        - name: syslog-syslog
+          streams:
+            - Microsoft-Syslog
+          facilityNames:
+            - syslog
+          logLevels:
+            - Info
+            - Notice
+            - Warning
+            - Error
+            - Critical
+            - Alert
+            - Emergency
+        # user: user-level messages — Error and above
+        - name: syslog-user
+          streams:
+            - Microsoft-Syslog
+          facilityNames:
+            - user
+          logLevels:
+            - Error
+            - Critical
+            - Alert
+            - Emergency
+        # cron: clock daemon (cron/at) — Warning and above
+        - name: syslog-cron
+          streams:
+            - Microsoft-Syslog
+          facilityNames:
+            - cron
+          logLevels:
+            - Warning
+            - Error
+            - Critical
+            - Alert
+            - Emergency
+    tags: ref:azure_resource_groups.syslog.tags

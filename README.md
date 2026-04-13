@@ -89,7 +89,15 @@ Hero modules provide exhaustive coverage of their resource type: all writable sp
 
 | Module | Provider | Configurations | Notes |
 |--------|----------|---------------|-------|
-| *(none yet — use `/tf-fix <name> --hero` or `/tf-module <name> --hero` to promote)* | | | |
+| `monitor_workspace` | Azure (Microsoft.Monitor/accounts) | `observability_basic.yaml`, `observability_grafana_prometheus.yaml`, `observability_private.yaml` | Preview-only API (`2023-10-01-preview`); all writable properties exposed |
+| `log_analytics_workspace` | Azure (Microsoft.OperationalInsights/workspaces) | `observability_basic.yaml`, `observability_grafana_prometheus.yaml`, `observability_private.yaml` | API `2025-07-01`; identity, replication, SecuredByPerimeter network access |
+| `managed_grafana` | Azure (Microsoft.Dashboard/grafana) | `observability_grafana_prometheus.yaml`, `observability_private.yaml` | API `2025-08-01`; enterprise config, plugins, creator admin, smtp/snapshots/users |
+| `data_collection_endpoint` | Azure (Microsoft.Insights/dataCollectionEndpoints) | `observability_basic.yaml`, `observability_grafana_prometheus.yaml` | API `2024-03-11`; managed identity, network ACLs, kind |
+| `data_collection_rule` | Azure (Microsoft.Insights/dataCollectionRules) | `observability_basic.yaml`, `observability_grafana_prometheus.yaml` | API `2024-03-11`; full data flow, agent settings, direct data sources, references |
+| `data_collection_rule_association` | Azure (Microsoft.Insights/dataCollectionRuleAssociations) | `observability_basic.yaml`, `observability_grafana_prometheus.yaml` | API `2024-03-11`; scope-based ARM path, mutually exclusive DCR/DCE association |
+| `monitor_private_link_scope` | Azure (Microsoft.Insights/privateLinkScopes) | `observability_private.yaml` | API `2021-09-01` (latest stable); `PrivateOnly` access mode defaults for SOC2; access mode exclusions per-endpoint |
+| `monitor_private_link_scoped_resource` | Azure (Microsoft.Insights/privateLinkScopes/scopedResources) | `observability_private.yaml` | API `2021-09-01` (latest stable); `force_new_attrs` on `linkedResourceId`; LRO polling on create/update/delete |
+| `private_dns_zone_virtual_network_link` | Azure (Microsoft.Network/privateDnsZones/virtualNetworkLinks) | `observability_private.yaml` | API `2024-06-01` (latest stable); PATCH update method; `NxDomainRedirect` resolution policy; `write_only_attrs` for immutable `location` |
 
 > To add a module to this list, it must satisfy all hero completion criteria defined in `.github/skills/tf-fix/SKILL.md` (Hero Mode section).
 

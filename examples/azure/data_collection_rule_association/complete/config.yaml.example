@@ -1,0 +1,12 @@
+default_location: westeurope
+
+terraform_backend:
+  type: local
+  path: data_collection_rule_association_complete.tfstate
+
+azure_data_collection_rule_associations:
+  complete:
+    resource_id: /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-example/providers/Microsoft.Compute/virtualMachines/vm-example
+    association_name: dcra-vm-to-dcr
+    description: "Associates the example VM with the data collection rule"
+    data_collection_rule_id: /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-dcr/providers/Microsoft.Insights/dataCollectionRules/dcr-example

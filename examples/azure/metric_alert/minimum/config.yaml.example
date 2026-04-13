@@ -1,0 +1,29 @@
+default_location: westeurope
+
+terraform_backend:
+  type: local
+  path: metric_alert_minimum.tfstate
+
+azure_resource_groups:
+  example:
+    resource_group_name: rg-observability
+    location: westeurope
+
+azure_metric_alerts:
+  minimum:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: ref:azure_resource_groups.example.resource_group_name
+    metric_alert_name: alert-high-cpu
+    severity: 2
+    scopes:
+      - /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-target/providers/Microsoft.Compute/virtualMachines/vm-example
+    evaluation_frequency: PT5M
+    criteria:
+      odata.type: Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria
+      allOf:
+        - name: cpu-threshold
+          metricName: Percentage CPU
+          operator: GreaterThan
+          threshold: 90
+          timeAggregation: Average
+          criterionType: StaticThresholdCriterion

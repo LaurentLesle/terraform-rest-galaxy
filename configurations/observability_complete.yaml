@@ -1,0 +1,267 @@
+default_location: westeurope
+
+# ── State backend ────────────────────────────────────────────────────────────
+terraform_backend:
+  type: local
+  path: observability_complete.tfstate
+
+azure_resource_groups:
+  obs-complete:
+    resource_group_name: rg-obs-complete
+    location: westeurope
+    tags:
+      environment: production
+      workload: observability-complete
+
+azure_monitor_workspaces:
+  obs-complete:
+    resource_group_name: ref:azure_resource_groups.obs-complete.resource_group_name
+    monitor_workspace_name: amw-obs-complete
+    location: ref:azure_resource_groups.obs-complete.location
+    tags: ref:azure_resource_groups.obs-complete.tags
+
+azure_log_analytics_workspaces:
+  obs-complete:
+    resource_group_name: ref:azure_resource_groups.obs-complete.resource_group_name
+    workspace_name: law-obs-complete
+    location: ref:azure_resource_groups.obs-complete.location
+    sku_name: PerGB2018
+    retention_in_days: 90
+    tags: ref:azure_resource_groups.obs-complete.tags
+
+azure_user_assigned_identities:
+  grafana:
+    resource_group_name: ref:azure_resource_groups.obs-complete.resource_group_name
+    identity_name: id-grafana-obs
+    location: ref:azure_resource_groups.obs-complete.location
+    tags: ref:azure_resource_groups.obs-complete.tags
+
+azure_managed_grafanas:
+  obs-complete:
+    resource_group_name: ref:azure_resource_groups.obs-complete.resource_group_name
+    grafana_name: grafana-obs-complete
+    location: ref:azure_resource_groups.obs-complete.location
+    sku_name: Standard
+    identity_type: UserAssigned
+    identity_user_assigned_identity_ids:
+      - ref:azure_user_assigned_identities.grafana.id
+    tags: ref:azure_resource_groups.obs-complete.tags
+
+azure_data_collection_endpoints:
+  obs-complete:
+    resource_group_name: ref:azure_resource_groups.obs-complete.resource_group_name
+    data_collection_endpoint_name: dce-obs-complete
+    location: ref:azure_resource_groups.obs-complete.location
+    tags: ref:azure_resource_groups.obs-complete.tags
+
+azure_data_collection_rules:
+  obs-complete:
+    resource_group_name: ref:azure_resource_groups.obs-complete.resource_group_name
+    data_collection_rule_name: dcr-obs-complete
+    location: ref:azure_resource_groups.obs-complete.location
+    data_collection_endpoint_id: ref:azure_data_collection_endpoints.obs-complete.id
+    destinations:
+      log_analytics:
+        - workspace_resource_id: ref:azure_log_analytics_workspaces.obs-complete.id
+          name: law-destination
+    data_flows:
+      - streams:
+          - Microsoft-Syslog
+        destinations:
+          - law-destination
+    tags: ref:azure_resource_groups.obs-complete.tags
+
+azure_application_insights:
+  obs-complete:
+    resource_group_name: ref:azure_resource_groups.obs-complete.resource_group_name
+    application_insights_name: appi-obs-complete
+    location: ref:azure_resource_groups.obs-complete.location
+    kind: web
+    application_type: web
+    workspace_resource_id: ref:azure_log_analytics_workspaces.obs-complete.id
+    ingestion_mode: LogAnalytics
+    retention_in_days: 90
+    disable_local_auth: true
+    tags: ref:azure_resource_groups.obs-complete.tags
+
+azure_action_groups:
+  platform-team:
+    resource_group_name: ref:azure_resource_groups.obs-complete.resource_group_name
+    action_group_name: ag-platform-team
+    short_name: platform
+    enabled: true
+    email_receivers:
+      - name: platform-email
+        email_address: platform@example.com
+        use_common_alert_schema: true
+    tags: ref:azure_resource_groups.obs-complete.tags
+
+  sre-team:
+    resource_group_name: ref:azure_resource_groups.obs-complete.resource_group_name
+    action_group_name: ag-sre-team
+    short_name: sre
+    enabled: true
+    email_receivers:
+      - name: sre-email
+        email_address: sre@example.com
+        use_common_alert_schema: true
+    webhook_receivers:
+      - name: sre-pagerduty
+        service_uri: https://events.pagerduty.com/v2/enqueue
+        use_common_alert_schema: true
+    sms_receivers:
+      - name: sre-oncall-sms
+        country_code: "1"
+        phone_number: "5550911"
+    tags: ref:azure_resource_groups.obs-complete.tags
+
+azure_metric_alerts:
+  high-cpu:
+    resource_group_name: ref:azure_resource_groups.obs-complete.resource_group_name
+    metric_alert_name: alert-high-cpu
+    location: global
+    severity: 2
+    enabled: true
+    scopes:
+      - /subscriptions/00000000-0000-0000-0000-000000000000
+    evaluation_frequency: PT5M
+    window_size: PT5M
+    target_resource_type: Microsoft.Compute/virtualMachines
+    target_resource_region: westeurope
+    criteria:
+      odata.type: Microsoft.Azure.Monitor.MultipleResourceMultipleMetricCriteria
+      allOf:
+        - name: cpu-criterion
+          metricName: Percentage CPU
+          metricNamespace: Microsoft.Compute/virtualMachines
+          operator: GreaterThan
+          threshold: 90
+          timeAggregation: Average
+          criterionType: StaticThresholdCriterion
+    actions:
+      - action_group_id: ref:azure_action_groups.sre-team.id
+    auto_mitigate: true
+    tags: ref:azure_resource_groups.obs-complete.tags
+
+  high-memory:
+    resource_group_name: ref:azure_resource_groups.obs-complete.resource_group_name
+    metric_alert_name: alert-high-memory
+    location: global
+    severity: 2
+    enabled: true
+    scopes:
+      - /subscriptions/00000000-0000-0000-0000-000000000000
+    evaluation_frequency: PT5M
+    window_size: PT5M
+    target_resource_type: Microsoft.Compute/virtualMachines
+    target_resource_region: westeurope
+    criteria:
+      odata.type: Microsoft.Azure.Monitor.MultipleResourceMultipleMetricCriteria
+      allOf:
+        - name: memory-criterion
+          metricName: Available Memory Bytes
+          metricNamespace: Microsoft.Compute/virtualMachines
+          operator: LessThan
+          threshold: 1073741824
+          timeAggregation: Average
+          criterionType: StaticThresholdCriterion
+    actions:
+      - action_group_id: ref:azure_action_groups.sre-team.id
+    auto_mitigate: true
+    tags: ref:azure_resource_groups.obs-complete.tags
+
+azure_scheduled_query_rules:
+  error-rate:
+    resource_group_name: ref:azure_resource_groups.obs-complete.resource_group_name
+    rule_name: sqr-error-rate
+    location: ref:azure_resource_groups.obs-complete.location
+    kind: LogAlert
+    severity: 1
+    enabled: true
+    scopes:
+      - ref:azure_log_analytics_workspaces.obs-complete.id
+    evaluation_frequency: PT15M
+    window_size: PT15M
+    criteria:
+      all_of:
+        - query: "requests | where resultCode startswith '5' | summarize errorCount = count() by bin(timestamp, 15m)"
+          time_aggregation: Count
+          operator: GreaterThan
+          threshold: 10
+          failing_periods:
+            number_of_evaluation_periods: 1
+            min_failing_periods_to_alert: 1
+    actions:
+      action_groups:
+        - ref:azure_action_groups.sre-team.id
+    auto_mitigate: true
+    tags: ref:azure_resource_groups.obs-complete.tags
+
+azure_activity_log_alerts:
+  resource-deletion:
+    resource_group_name: ref:azure_resource_groups.obs-complete.resource_group_name
+    activity_log_alert_name: ala-resource-deletion
+    location: global
+    enabled: true
+    scopes:
+      - /subscriptions/00000000-0000-0000-0000-000000000000
+    condition:
+      all_of:
+        - field: category
+          equals: Administrative
+        - field: operationName
+          contains_any:
+            - delete/action
+    actions:
+      action_groups:
+        - action_group_id: ref:azure_action_groups.platform-team.id
+    description: Alert when any resource is deleted in the subscription
+    tags: ref:azure_resource_groups.obs-complete.tags
+
+azure_alert_processing_rules:
+  business-hours-suppression:
+    resource_group_name: ref:azure_resource_groups.obs-complete.resource_group_name
+    alert_processing_rule_name: apr-biz-hours-suppression
+    location: ref:azure_resource_groups.obs-complete.location
+    enabled: true
+    scopes:
+      - /subscriptions/00000000-0000-0000-0000-000000000000
+    actions:
+      - action_type: RemoveAllActionGroups
+    conditions:
+      - field: Severity
+        operator: Equals
+        values:
+          - sev3
+          - sev4
+    schedule:
+      time_zone: "W. Europe Standard Time"
+      recurrences:
+        - recurrence_type: Daily
+          start_time: "22:00:00"
+          end_time: "06:00:00"
+    description: Suppress low-severity alerts outside business hours
+    tags: ref:azure_resource_groups.obs-complete.tags
+
+azure_diagnostic_settings:
+  law-diagnostics:
+    resource_id: ref:azure_log_analytics_workspaces.obs-complete.id
+    diagnostic_setting_name: law-to-storage
+    log_analytics_workspace_id: ref:azure_log_analytics_workspaces.obs-complete.id
+    logs:
+      - category_group: allLogs
+        enabled: true
+    metrics:
+      - category: AllMetrics
+        enabled: true
+
+  grafana-diagnostics:
+    resource_id: ref:azure_managed_grafanas.obs-complete.id
+    diagnostic_setting_name: grafana-to-law
+    log_analytics_workspace_id: ref:azure_log_analytics_workspaces.obs-complete.id
+    logs:
+      - category_group: allLogs
+        enabled: true
+    metrics:
+      - category: AllMetrics
+        enabled: true

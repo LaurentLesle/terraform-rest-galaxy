@@ -1,0 +1,37 @@
+default_location: westeurope
+
+terraform_backend:
+  type: local
+  path: scheduled_query_rule_minimum.tfstate
+
+azure_resource_groups:
+  example:
+    resource_group_name: rg-observability
+    location: westeurope
+
+azure_log_analytics_workspaces:
+  example:
+    resource_group_name: ref:azure_resource_groups.example.resource_group_name
+    workspace_name: law-example
+    location: ref:azure_resource_groups.example.location
+
+azure_scheduled_query_rules:
+  minimum:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: ref:azure_resource_groups.example.resource_group_name
+    rule_name: sqr-failed-requests
+    location: ref:azure_resource_groups.example.location
+    scopes:
+      - ref:azure_log_analytics_workspaces.example.id
+    severity: 2
+    evaluation_frequency: PT15M
+    window_size: PT15M
+    criteria:
+      all_of:
+        - query: "requests | where success == false"
+          time_aggregation: Count
+          operator: GreaterThan
+          threshold: 5
+          failing_periods:
+            number_of_evaluation_periods: 1
+            min_failing_periods_to_alert: 1

@@ -1,0 +1,56 @@
+# Azure Monitor Private Link Scoped Resource — complete configuration example
+# Links multiple Azure Monitor resources into an AMPLS:
+# a Log Analytics Workspace and a Data Collection Endpoint.
+# Drive via: TF_VAR_config_file=configurations/my.yaml terraform -chdir=.build apply
+
+default_location: westeurope
+
+azure_resource_groups:
+  obs:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: rg-ampls-complete
+    location: westeurope
+    tags:
+      environment: dev
+
+azure_monitor_private_link_scopes:
+  main:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: ref:azure_resource_groups.obs.resource_group_name
+    scope_name: ampls-complete
+    location: ref:azure_resource_groups.obs.location
+    ingestion_access_mode: PrivateOnly
+    query_access_mode: PrivateOnly
+    tags: ref:azure_resource_groups.obs.tags
+
+azure_log_analytics_workspaces:
+  main:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: ref:azure_resource_groups.obs.resource_group_name
+    workspace_name: law-complete
+    location: ref:azure_resource_groups.obs.location
+    sku_name: PerGB2018
+    tags: ref:azure_resource_groups.obs.tags
+
+azure_data_collection_endpoints:
+  main:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: ref:azure_resource_groups.obs.resource_group_name
+    data_collection_endpoint_name: dce-complete
+    location: ref:azure_resource_groups.obs.location
+    public_network_access: Disabled
+    tags: ref:azure_resource_groups.obs.tags
+
+azure_monitor_private_link_scoped_resources:
+  law:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: ref:azure_resource_groups.obs.resource_group_name
+    private_link_scope_name: ref:azure_monitor_private_link_scopes.main.name
+    scoped_resource_name: link-law
+    linked_resource_id: ref:azure_log_analytics_workspaces.main.id
+  dce:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: ref:azure_resource_groups.obs.resource_group_name
+    private_link_scope_name: ref:azure_monitor_private_link_scopes.main.name
+    scoped_resource_name: link-dce
+    linked_resource_id: ref:azure_data_collection_endpoints.main.id

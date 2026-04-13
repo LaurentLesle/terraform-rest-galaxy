@@ -1,0 +1,34 @@
+default_location: westeurope
+
+terraform_backend:
+  type: local
+  path: activity_log_alert_minimum.tfstate
+
+azure_resource_groups:
+  example:
+    resource_group_name: rg-observability
+    location: westeurope
+
+azure_action_groups:
+  example:
+    resource_group_name: ref:azure_resource_groups.example.resource_group_name
+    action_group_name: ag-ops
+    short_name: ops
+
+azure_activity_log_alerts:
+  minimum:
+    subscription_id: "00000000-0000-0000-0000-000000000000"
+    resource_group_name: ref:azure_resource_groups.example.resource_group_name
+    activity_log_alert_name: alert-resource-deleted
+    scopes:
+      - /subscriptions/00000000-0000-0000-0000-000000000000
+    condition:
+      all_of:
+        - field: category
+          equals: Administrative
+        - field: operationName
+          contains_any:
+            - delete
+    actions:
+      action_groups:
+        - action_group_id: ref:azure_action_groups.example.id

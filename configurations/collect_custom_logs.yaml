@@ -1,0 +1,111 @@
+# ── Custom Application Logs + IIS Logs ─────────────────────────────────────────
+# Custom log file collection: structured JSON app logs, plaintext error log, IIS logs.
+# Includes streamDeclarations for the JSON custom stream with typed columns.
+# transformKql parses JSON payloads into structured columns.
+# Destination: Log Analytics Workspace.
+
+terraform_backend:
+  type: local
+  path: collect_custom_logs.tfstate
+
+default_location: westeurope
+
+azure_resource_groups:
+  customlogs:
+    resource_group_name: rg-collect-custom-logs
+    location: westeurope
+    tags:
+      environment: production
+      scenario: custom-log-collection
+
+azure_log_analytics_workspaces:
+  customlogs:
+    resource_group_name: ref:azure_resource_groups.customlogs.resource_group_name
+    workspace_name: law-collect-custom-logs
+    location: ref:azure_resource_groups.customlogs.location
+    sku_name: PerGB2018
+    retention_in_days: 90
+    features_disable_local_auth: true
+    tags: ref:azure_resource_groups.customlogs.tags
+
+azure_data_collection_endpoints:
+  customlogs:
+    resource_group_name: ref:azure_resource_groups.customlogs.resource_group_name
+    data_collection_endpoint_name: dce-collect-custom-logs
+    location: ref:azure_resource_groups.customlogs.location
+    public_network_access: Enabled
+    tags: ref:azure_resource_groups.customlogs.tags
+
+azure_data_collection_rules:
+  customlogs:
+    resource_group_name: ref:azure_resource_groups.customlogs.resource_group_name
+    data_collection_rule_name: dcr-collect-custom-logs
+    location: ref:azure_resource_groups.customlogs.location
+    kind: Linux
+    description: Custom application JSON + text logs and IIS logs to Log Analytics with stream declarations
+    data_collection_endpoint_id: ref:azure_data_collection_endpoints.customlogs.id
+    stream_declarations:
+      Custom-AppJsonLogs:
+        columns:
+          - name: TimeGenerated
+            type: datetime
+          - name: Level
+            type: string
+          - name: Message
+            type: string
+          - name: CorrelationId
+            type: string
+          - name: UserId
+            type: string
+          - name: RawData
+            type: string
+    destinations:
+      logAnalytics:
+        - workspaceResourceId: ref:azure_log_analytics_workspaces.customlogs.id
+          name: law-destination
+    data_flows:
+      # JSON app logs → custom stream table (with KQL transform to parse JSON)
+      - streams:
+          - Custom-AppJsonLogs
+        destinations:
+          - law-destination
+        output_stream: Custom-AppJsonLogs
+        transform_kql: "source | extend d = parse_json(RawData) | project TimeGenerated = todatetime(d.timestamp), Level = tostring(d.level), Message = tostring(d.message), CorrelationId = tostring(d.correlationId), UserId = tostring(d.userId)"
+      # Text error log → Syslog-compatible stream
+      - streams:
+          - Custom-AppTextErrors
+        destinations:
+          - law-destination
+        output_stream: Microsoft-Syslog
+      # IIS logs → W3CIISLog stream
+      - streams:
+          - Microsoft-W3CIISLog
+        destinations:
+          - law-destination
+    data_sources:
+      # App JSON logs — structured JSON format, each line is a record
+      logFiles:
+        - name: logfile-app-json
+          streams:
+            - Custom-AppJsonLogs
+          filePatterns:
+            - "/var/log/myapp/*.json"
+          format: json
+        # App text error logs — ISO 8601 timestamps
+        - name: logfile-app-errors
+          streams:
+            - Custom-AppTextErrors
+          filePatterns:
+            - "/var/log/myapp/errors.log"
+          format: text
+          settings:
+            text:
+              recordStartTimestampFormat: "ISO 8601"
+      # IIS logs from standard W3SVC1 directory
+      iisLogs:
+        - name: iislogs-w3svc1
+          streams:
+            - Microsoft-W3CIISLog
+          logDirectories:
+            - "C:\\inetpub\\logs\\LogFiles\\W3SVC1"
+    tags: ref:azure_resource_groups.customlogs.tags
