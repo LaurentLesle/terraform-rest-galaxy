@@ -53,11 +53,14 @@ resource "rest_resource" "repository" {
   # POST /orgs/{org}/repos but never returned by GET /repos/{org}/{name}.
   # Without write_only_attrs the provider sees null on read-back and raises
   # "Provider produced inconsistent result after apply".
-  write_only_attrs = toset([
+  # license_template and gitignore_template are only added to body when their
+  # variables are non-null, so the set is built conditionally — the provider
+  # validates that every write_only_attrs path exists in body.
+  write_only_attrs = toset(compact([
     "auto_init",
-    "license_template",
-    "gitignore_template",
-  ])
+    var.gitignore_template != null ? "gitignore_template" : "",
+    var.license_template != null ? "license_template" : "",
+  ]))
 
   output_attrs = toset([
     "id",
