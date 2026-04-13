@@ -22,11 +22,21 @@
 #   - No ARM IDs or GUIDs are hardcoded in resource blocks — all cross-references use ref:.
 # ─────────────────────────────────────────────────────────────────────────────
 
+default_location: westeurope
+
 # ── External references (built-in policies and initiatives, not managed here) ─
 # Declare well-known built-in policies/initiatives so they can be referenced
 # via ref:externals.policy_definitions.<key>.id and
 # ref:externals.policy_set_definitions.<key>.id in any resource below.
 externals:
+  # ── Platform subscription IDs (replace with real GUIDs before deploying) ─────
+  # Reference with: ref:externals.azure_subscriptions.<key>.id
+  azure_subscriptions:
+    platform_management:
+      id: "00000000-0000-0000-0000-000000000001"
+      # Replace with the actual Platform Management subscription GUID.
+      # Obtain it with: az account list --query "[?name=='Platform Management'].id" -o tsv
+
   # ── Built-in role definitions (static ARM paths — GUIDs are globally stable) ─
   # Reference with: ref:externals.azure_role_definitions.<key>.id
   azure_role_definitions:
@@ -479,6 +489,33 @@ entraid_groups:
     is_assignable_to_role:   true
     description:             "ALZ Global Readers — Reader at tenant root. Audit, compliance, and cross-team visibility with no write access."
 
+# ── Platform Management infrastructure ───────────────────────────────────────
+# Central Log Analytics workspace deployed in the Platform/Management subscription.
+# All DINE diagnostic policies send logs here.
+# Update externals.azure_subscriptions.platform_management.id before deploying.
+
+azure_resource_groups:
+  rg_platform_management:
+    subscription_id:     ref:externals.azure_subscriptions.platform_management.id
+    resource_group_name: rg-platform-management
+    tags:
+      environment: production
+      cost-center:  platform
+      owner:        platform-team
+
+azure_log_analytics_workspaces:
+  law_platform:
+    resource_group_name: ref:azure_resource_groups.rg_platform_management.name
+    subscription_id:     ref:externals.azure_subscriptions.platform_management.id
+    workspace_name:      law-platform
+    retention_in_days:   90
+    sku_name:            PerGB2018
+    features_disable_local_auth: true
+    tags:
+      environment: production
+      cost-center:  platform
+      owner:        platform-team
+
 # ── Custom Policy Definitions ─────────────────────────────────────────────────
 # Defined at the root management group scope — visible to all child groups.
 azure_policy_definitions:
@@ -879,36 +916,35 @@ azure_policy_assignments:
 
   # ── Pillar 2: Logging & monitoring — root MG ───────────────────────────────
   # DINE policies deploy diagnostic settings and AMA to all resources.
-  # Policies requiring a Log Analytics workspace ID use DoNotEnforce until
-  # the central workspace is provisioned via the Platform/Management config.
-  # Update the logAnalytics parameter value and switch to Default after apply.
+  # The central Log Analytics workspace (law_platform) is provisioned above and
+  # referenced via ref: so the ARM path is resolved at plan time from the managed resource.
 
   root_diag_storage_log_analytics:
     scope: ref:azure_management_groups.mg_root.id
     policy_definition_id: ref:externals.policy_definitions.diag_storage_log_analytics.id
     display_name: "Configure Storage diagnostic settings to Log Analytics (root)"
-    enforcement_mode: DoNotEnforce
+    enforcement_mode: Default
     parameters:
       logAnalytics:
-        value: "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-platform-management/providers/Microsoft.OperationalInsights/workspaces/law-platform"
+        value: ref:azure_log_analytics_workspaces.law_platform.id
 
   root_diag_keyvault_log_analytics:
     scope: ref:azure_management_groups.mg_root.id
     policy_definition_id: ref:externals.policy_definitions.diag_keyvault_log_analytics.id
     display_name: "Configure Key Vault diagnostic settings to Log Analytics (root)"
-    enforcement_mode: DoNotEnforce
+    enforcement_mode: Default
     parameters:
       logAnalytics:
-        value: "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-platform-management/providers/Microsoft.OperationalInsights/workspaces/law-platform"
+        value: ref:azure_log_analytics_workspaces.law_platform.id
 
   root_diag_sql_log_analytics:
     scope: ref:azure_management_groups.mg_root.id
     policy_definition_id: ref:externals.policy_definitions.diag_sql_log_analytics.id
     display_name: "Configure SQL Database diagnostic settings to Log Analytics (root)"
-    enforcement_mode: DoNotEnforce
+    enforcement_mode: Default
     parameters:
       logAnalytics:
-        value: "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-platform-management/providers/Microsoft.OperationalInsights/workspaces/law-platform"
+        value: ref:azure_log_analytics_workspaces.law_platform.id
 
   root_audit_diagnostic_setting:
     scope: ref:azure_management_groups.mg_root.id
