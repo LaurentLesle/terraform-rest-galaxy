@@ -62,6 +62,11 @@ jobs:
             exit 1
           fi
 
+      - name: Remove heavy submodules from release tree
+        run: |
+          # Specs and provider source are large and not needed by consumers
+          git rm -rf --quiet providers/ specs/ .gitmodules
+
       - name: Create tagged release commit
         env:
           VERSION: ${{ inputs.version }}
