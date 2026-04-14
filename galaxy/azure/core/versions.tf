@@ -3,7 +3,7 @@ terraform {
   required_providers {
     rest = {
       source  = "LaurentLesle/rest"
-      version = ">= 1.2.0"
+      version = ">= 1.3.1"
     }
     kind = {
       source  = "tehcyx/kind"
