@@ -6,9 +6,36 @@
 
 resource "random_uuid" "role_assignment_name" {}
 
+# When check_existance is true, look up existing role assignments at the scope
+# filtered by principalId. Use the selector to find the one matching our
+# roleDefinitionId. If found, reuse its name so the resource path matches the
+# existing assignment and check_existance imports it instead of creating a duplicate.
+data "rest_resource" "existing" {
+  count = var.check_existance ? 1 : 0
+
+  id = "${var.scope}/providers/Microsoft.Authorization/roleAssignments"
+
+  query = {
+    api-version = [local.api_version]
+    "$filter"   = ["principalId eq '${var.principal_id}'"]
+  }
+
+  selector = "value.#(properties.roleDefinitionId==\"${local.role_definition_id}\")"
+
+  output_attrs = toset(["name"])
+
+  allow_not_exist = true
+
+  auth_ref = var.auth_ref
+}
+
 locals {
   api_version = "2022-04-01"
-  ra_path     = "${var.scope}/providers/Microsoft.Authorization/roleAssignments/${random_uuid.role_assignment_name.result}"
+
+  # If we found an existing assignment, use its name; otherwise use the random UUID.
+  existing_name = var.check_existance ? try(data.rest_resource.existing[0].output.name, null) : null
+  ra_name       = local.existing_name != null ? local.existing_name : random_uuid.role_assignment_name.result
+  ra_path       = "${var.scope}/providers/Microsoft.Authorization/roleAssignments/${local.ra_name}"
 
   # Azure returns roleDefinitionId with subscription scope. Normalise provider-
   # relative paths (/providers/...) to the full form so the body is idempotent.
