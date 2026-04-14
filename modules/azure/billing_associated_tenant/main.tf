@@ -107,10 +107,11 @@ resource "rest_resource" "billing_associated_tenant" {
     }
   }
 
-  # provisioningManagementState transitions from "Pending" → "Active" server-side
-  # when the permission request is approved. Ignore drift on the body field.
+  # Azure billing associated tenants are immutable after creation — PUT returns
+  # 400 UnsupportedProvisioningStateUpdate once provisioned. Ignore all drift
+  # so that check_existance imports don't trigger a spurious update.
   lifecycle {
-    ignore_changes = [body]
+    ignore_changes = all
   }
 
   depends_on = [rest_operation.check_access]
