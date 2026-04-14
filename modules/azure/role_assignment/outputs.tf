@@ -1,6 +1,6 @@
 output "id" {
   description = "The full ARM resource ID of the role assignment."
-  value       = local.ra_path
+  value       = "${var.scope}/providers/Microsoft.Authorization/roleAssignments/${rest_resource.role_assignment.output.name}"
 }
 
 output "api_version" {
