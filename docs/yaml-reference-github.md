@@ -20,6 +20,7 @@ Requires var.github_token with repo scope.
 | `environment_name` | `string` | yes | — |  |
 | `secret_name` | `string` | yes | — |  |
 | `plaintext_value` | `string` | yes | — |  |
+| `check_existance` | `bool` | no | `null` |  |
 
 #### YAML Example
 
@@ -54,6 +55,7 @@ Requires var.github_token with repo scope.
 | `environment_name` | `string` | yes | — |  |
 | `name` | `string` | yes | — |  |
 | `value` | `string` | yes | — |  |
+| `check_existance` | `bool` | no | `null` |  |
 
 #### YAML Example
 
@@ -195,6 +197,7 @@ Requires var.github_token with admin:org scope.
 | `value` | `string` | yes | — |  |
 | `visibility` | `string` | yes | — |  |
 | `selected_repository_ids` | `list(number)` | no | `null` |  |
+| `check_existance` | `bool` | no | `null` |  |
 
 #### YAML Example
 
@@ -273,6 +276,7 @@ Requires var.github_token with repo scope.
 | `repo` | `string` | yes | — |  |
 | `name` | `string` | yes | — |  |
 | `value` | `string` | yes | — |  |
+| `check_existance` | `bool` | no | `null` |  |
 
 #### YAML Example
 

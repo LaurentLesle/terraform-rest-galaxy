@@ -1055,6 +1055,27 @@ azure_dns_zones:
 
 ---
 
+### `azure_private_dns_zone_virtual_network_links`
+
+**API version:** `2024-06-01`
+
+Map of Private DNS Zone Virtual Network Link instances to create. Each map key acts as the for_each identifier and must be unique within this configuration. Links a virtual network to a private DNS zone for private name resolution.
+
+#### Attributes
+
+| Name | Type | Required | Default | Description |
+|------|------|:--------:|---------|-------------|
+| `subscription_id` | `string` | no | `null` |  |
+| `resource_group_name` | `string` | yes | — |  |
+| `private_dns_zone_name` | `string` | yes | — |  |
+| `virtual_network_link_name` | `string` | no | `null` |  |
+| `virtual_network_id` | `string` | yes | — |  |
+| `registration_enabled` | `bool` | no | `false` |  |
+| `resolution_policy` | `string` | no | `null` |  |
+| `tags` | `map(string)` | no | `null` |  |
+
+---
+
 ### `azure_private_dns_zones`
 
 **API version:** `2024-06-01`
@@ -1714,6 +1735,552 @@ azure_vpn_gateways:
 
 ---
 
+### `azure_action_groups`
+
+**API version:** `2023-01-01`
+
+Map of Action Group instances to create. Each map key acts as the for_each
+identifier and must be unique within this configuration.
+
+#### Attributes
+
+| Name | Type | Required | Default | Description |
+|------|------|:--------:|---------|-------------|
+| `subscription_id` | `string` | no | `null` |  |
+| `resource_group_name` | `string` | yes | — |  |
+| `action_group_name` | `string` | no | `null` |  |
+| `location` | `string` | no | `"global"` |  |
+| `short_name` | `string` | yes | — |  |
+| `enabled` | `bool` | no | `true` |  |
+| `tags` | `map(string)` | no | `null` |  |
+| `email_receivers` | `list(object)` | no | `[]` |  |
+| `sms_receivers` | `list(object)` | no | `[]` |  |
+| `webhook_receivers` | `list(object)` | no | `[]` |  |
+| `itsm_receivers` | `list(object)` | no | `[]` |  |
+| `azure_app_push_receivers` | `list(object)` | no | `[]` |  |
+| `automation_runbook_receivers` | `list(object)` | no | `[]` |  |
+| `voice_receivers` | `list(object)` | no | `[]` |  |
+| `logic_app_receivers` | `list(object)` | no | `[]` |  |
+| `azure_function_receivers` | `list(object)` | no | `[]` |  |
+| `arm_role_receivers` | `list(object)` | no | `[]` |  |
+| `event_hub_receivers` | `list(object)` | no | `[]` |  |
+
+#### YAML Example
+
+```yaml
+azure_action_groups:
+  ops-team:
+    resource_group_name: "rg-observability"
+    short_name: "ops"
+    email_receivers: [
+      { name = "ops-email", email_address = "ops@example.com" }:
+    ]:
+```
+
+---
+
+### `azure_activity_log_alerts`
+
+**API version:** `2026-01-01`
+
+Map of Activity Log Alert rule instances to create. Each map key acts as the for_each
+identifier and must be unique within this configuration.
+
+#### Attributes
+
+| Name | Type | Required | Default | Description |
+|------|------|:--------:|---------|-------------|
+| `subscription_id` | `string` | no | `null` |  |
+| `resource_group_name` | `string` | yes | — |  |
+| `activity_log_alert_name` | `string` | no | `null` |  |
+| `location` | `string` | no | `"global"` |  |
+| `scopes` | `list(string)` | yes | — |  |
+| `condition` | `object` | yes | — |  |
+| `actions` | `object` | yes | — |  |
+| `enabled` | `bool` | no | `true` |  |
+| `description` | `string` | no | `null` |  |
+| `tenant_scope` | `string` | no | `null` |  |
+| `tags` | `map(string)` | no | `null` |  |
+
+#### YAML Example
+
+```yaml
+azure_activity_log_alerts:
+  resource-deleted:
+    resource_group_name: "rg-observability"
+    scopes: ["/subscriptions/00000000-0000-0000-0000-000000000000"]
+    condition:
+      all_of: [
+        { field = "category", equals = "Administrative" }:
+        { field = "operationName", contains_any = ["delete"] }:
+      ]:
+    actions:
+      action_groups: [{ action_group_id = "/subscriptions/.../actionGroups/ops" }]
+```
+
+---
+
+### `azure_alert_processing_rules`
+
+**API version:** `2021-08-08`
+
+Map of Alert Processing Rule instances to create. Each map key acts as the for_each
+identifier and must be unique within this configuration. When location is omitted,
+var.default_location is used as the default.
+
+#### Attributes
+
+| Name | Type | Required | Default | Description |
+|------|------|:--------:|---------|-------------|
+| `subscription_id` | `string` | no | `null` |  |
+| `resource_group_name` | `string` | yes | — |  |
+| `alert_processing_rule_name` | `string` | no | `null` |  |
+| `location` | `string` | no | `null` |  |
+| `scopes` | `list(string)` | yes | — |  |
+| `actions` | `list(object)` | yes | — |  |
+| `conditions` | `list(object)` | no | `[]` |  |
+| `schedule` | `object` | no | `null` |  |
+| `description` | `string` | no | `null` |  |
+| `enabled` | `bool` | no | `true` |  |
+| `tags` | `map(string)` | no | `null` |  |
+
+#### YAML Example
+
+```yaml
+azure_alert_processing_rules:
+  maintenance-window:
+    resource_group_name: "rg-observability"
+    location: "westeurope"
+    scopes: ["/subscriptions/00000000-0000-0000-0000-000000000000"]
+    actions: [{ action_type = "RemoveAllActionGroups" }]
+    schedule:
+      time_zone: "UTC"
+      recurrences: [{ recurrence_type = "Weekly", days_of_week = ["Saturday", "Sunday"] }]
+```
+
+---
+
+### `azure_application_insights`
+
+**API version:** `2020-02-02`
+
+Map of Application Insights component instances to create. Each map key acts as the
+for_each identifier and must be unique within this configuration. When location is
+omitted, var.default_location is used as the default.
+
+#### Attributes
+
+| Name | Type | Required | Default | Description |
+|------|------|:--------:|---------|-------------|
+| `subscription_id` | `string` | no | `null` |  |
+| `resource_group_name` | `string` | yes | — |  |
+| `application_insights_name` | `string` | no | `null` |  |
+| `location` | `string` | no | `null` |  |
+| `kind` | `string` | no | `"web"` |  |
+| `application_type` | `string` | no | `"web"` |  |
+| `workspace_resource_id` | `string` | no | `null` |  |
+| `flow_type` | `string` | no | `"Bluefield"` |  |
+| `request_source` | `string` | no | `"rest"` |  |
+| `retention_in_days` | `number` | no | `90` |  |
+| `sampling_percentage` | `number` | no | `null` |  |
+| `disable_ip_masking` | `bool` | no | `false` |  |
+| `immediate_purge_data_on30_days` | `bool` | no | `null` |  |
+| `hockey_app_id` | `string` | no | `null` |  |
+| `public_network_access_for_ingestion` | `string` | no | `"Enabled"` |  |
+| `public_network_access_for_query` | `string` | no | `"Enabled"` |  |
+| `ingestion_mode` | `string` | no | `"LogAnalytics"` |  |
+| `disable_local_auth` | `bool` | no | `true` |  |
+| `force_customer_storage_for_profiler` | `bool` | no | `false` |  |
+| `etag` | `string` | no | `null` |  |
+| `tags` | `map(string)` | no | `null` |  |
+
+#### YAML Example
+
+```yaml
+azure_application_insights:
+  app-monitoring:
+    resource_group_name: "rg-observability"
+    workspace_resource_id: "/subscriptions/.../workspaces/my-law"
+    application_type: "web"
+```
+
+---
+
+### `azure_data_collection_endpoints`
+
+**API version:** `2024-03-11`
+
+Map of Data Collection Endpoint instances to create. Each map key acts as the for_each identifier and must be unique within this configuration. When location is omitted, var.default_location is used as the default.
+
+#### Attributes
+
+| Name | Type | Required | Default | Description |
+|------|------|:--------:|---------|-------------|
+| `subscription_id` | `string` | no | `null` |  |
+| `resource_group_name` | `string` | yes | — |  |
+| `data_collection_endpoint_name` | `string` | no | `null` |  |
+| `location` | `string` | no | `null` |  |
+| `description` | `string` | no | `null` |  |
+| `public_network_access` | `string` | no | `"Enabled"` |  |
+| `kind` | `string` | no | `null` |  |
+| `identity_type` | `string` | no | `null` |  |
+| `identity_user_assigned_identity_ids` | `list(string)` | no | `null` |  |
+| `tags` | `map(string)` | no | `null` |  |
+
+---
+
+### `azure_data_collection_rule_associations`
+
+**API version:** `2024-03-11`
+
+Map of Data Collection Rule Association instances to create. Each map key acts as the for_each identifier. resource_id is the full ARM ID of the target resource (VM, AKS node pool, etc.).
+
+#### Attributes
+
+| Name | Type | Required | Default | Description |
+|------|------|:--------:|---------|-------------|
+| `subscription_id` | `string` | no | `null` |  |
+| `resource_id` | `string` | yes | — |  |
+| `association_name` | `string` | no | `null` |  |
+| `description` | `string` | no | `null` |  |
+| `data_collection_rule_id` | `string` | no | `null` |  |
+| `data_collection_endpoint_id` | `string` | no | `null` |  |
+
+---
+
+### `azure_data_collection_rules`
+
+**API version:** `2024-03-11`
+
+Map of Data Collection Rule instances to create. Each map key acts as the for_each identifier and must be unique within this configuration. When location is omitted, var.default_location is used as the default.
+
+#### Attributes
+
+| Name | Type | Required | Default | Description |
+|------|------|:--------:|---------|-------------|
+| `subscription_id` | `string` | no | `null` |  |
+| `resource_group_name` | `string` | yes | — |  |
+| `data_collection_rule_name` | `string` | no | `null` |  |
+| `location` | `string` | no | `null` |  |
+| `description` | `string` | no | `null` |  |
+| `kind` | `string` | no | `null` |  |
+| `data_collection_endpoint_id` | `string` | no | `null` |  |
+| `stream_declarations` | `map(any)` | no | `null` |  |
+| `data_sources` | `any` | no | `null` |  |
+| `direct_data_sources` | `any` | no | `null` |  |
+| `destinations` | `any` | no | `null` |  |
+| `references` | `any` | no | `null` |  |
+| `agent_settings` | `any` | no | `null` |  |
+| `data_flows` | `list(object)` | no | `null` |  |
+| `identity_type` | `string` | no | `null` |  |
+| `identity_user_assigned_identity_ids` | `list(string)` | no | `null` |  |
+| `tags` | `map(string)` | no | `null` |  |
+
+---
+
+### `azure_diagnostic_settings`
+
+**API version:** `2021-05-01-preview`
+
+Map of Diagnostic Setting instances to create. Each map key acts as the for_each
+identifier and must be unique within this configuration.
+
+The resource_id is the full ARM ID of the target resource that the diagnostic
+setting will be attached to (e.g. a Log Analytics workspace, Application Insights
+component, or storage account).
+
+#### Attributes
+
+| Name | Type | Required | Default | Description |
+|------|------|:--------:|---------|-------------|
+| `subscription_id` | `string` | no | `null` |  |
+| `resource_id` | `string` | yes | — |  |
+| `diagnostic_setting_name` | `string` | no | `null` |  |
+| `log_analytics_workspace_id` | `string` | no | `null` |  |
+| `storage_account_id` | `string` | no | `null` |  |
+| `event_hub_authorization_rule_id` | `string` | no | `null` |  |
+| `event_hub_name` | `string` | no | `null` |  |
+| `marketplace_partner_id` | `string` | no | `null` |  |
+| `service_bus_rule_id` | `string` | no | `null` |  |
+| `log_analytics_destination_type` | `string` | no | `null` |  |
+| `logs` | `list(object)` | no | `[]` |  |
+| `metrics` | `list(object)` | no | `[]` |  |
+
+#### YAML Example
+
+```yaml
+azure_diagnostic_settings:
+  law-diag:
+    resource_id: "/subscriptions/.../workspaces/my-law"
+    log_analytics_workspace_id: "/subscriptions/.../workspaces/central-law"
+    logs: [{ category_group = "allLogs", enabled = true }]
+    metrics: [{ category = "AllMetrics", enabled = true }]
+```
+
+---
+
+### `azure_log_analytics_workspaces`
+
+**API version:** `2025-07-01`
+
+Map of Log Analytics Workspace instances to create. Each map key acts as the for_each identifier and must be unique within this configuration. When location is omitted, var.default_location is used as the default.
+
+#### Attributes
+
+| Name | Type | Required | Default | Description |
+|------|------|:--------:|---------|-------------|
+| `subscription_id` | `string` | no | `null` |  |
+| `resource_group_name` | `string` | yes | — |  |
+| `workspace_name` | `string` | no | `null` |  |
+| `location` | `string` | no | `null` |  |
+| `sku_name` | `string` | no | `"PerGB2018"` |  |
+| `sku_capacity_reservation_level` | `number` | no | `null` |  |
+| `retention_in_days` | `number` | no | `null` |  |
+| `daily_quota_gb` | `number` | no | `null` |  |
+| `public_network_access_for_ingestion` | `string` | no | `"Enabled"` |  |
+| `public_network_access_for_query` | `string` | no | `"Enabled"` |  |
+| `force_cmk_for_query` | `bool` | no | `null` |  |
+| `features_enable_data_export` | `bool` | no | `null` |  |
+| `features_immediate_purge_data_on_30_days` | `bool` | no | `null` |  |
+| `features_enable_log_access_using_only_resource_permissions` | `bool` | no | `null` |  |
+| `features_cluster_resource_id` | `string` | no | `null` |  |
+| `features_disable_local_auth` | `bool` | no | `true` |  |
+| `default_data_collection_rule_resource_id` | `string` | no | `null` |  |
+| `identity_type` | `string` | no | `null` |  |
+| `identity_user_assigned_identity_ids` | `list(string)` | no | `null` |  |
+| `replication_enabled` | `bool` | no | `null` |  |
+| `replication_location` | `string` | no | `null` |  |
+| `tags` | `map(string)` | no | `null` |  |
+
+---
+
+### `azure_managed_grafanas`
+
+**API version:** `2025-08-01`
+
+Map of Managed Grafana instances to create. Each map key acts as the for_each identifier and must be unique within this configuration. When location is omitted, var.default_location is used as the default.
+
+#### Attributes
+
+| Name | Type | Required | Default | Description |
+|------|------|:--------:|---------|-------------|
+| `subscription_id` | `string` | no | `null` |  |
+| `resource_group_name` | `string` | yes | — |  |
+| `grafana_name` | `string` | no | `null` |  |
+| `location` | `string` | no | `null` |  |
+| `sku_name` | `string` | no | `"Standard"` |  |
+| `identity_type` | `string` | no | `null` |  |
+| `identity_user_assigned_identity_ids` | `list(string)` | no | `null` |  |
+| `public_network_access` | `string` | no | `"Enabled"` |  |
+| `zone_redundancy` | `string` | no | `"Disabled"` |  |
+| `api_key` | `string` | no | `"Disabled"` |  |
+| `deterministic_outbound_ip` | `string` | no | `"Disabled"` |  |
+| `creator_can_admin` | `string` | no | `null` |  |
+| `grafana_major_version` | `string` | no | `null` |  |
+| `azure_monitor_workspace_integrations` | `list(object)` | no | `null` |  |
+| `grafana_configurations_smtp` | `object` | no | `null` |  |
+| `grafana_configurations_snapshots_external_enabled` | `bool` | no | `null` |  |
+| `grafana_configurations_users_viewers_can_edit` | `bool` | no | `null` |  |
+| `grafana_configurations_users_editors_can_admin` | `bool` | no | `null` |  |
+| `enterprise_marketplace_plan_id` | `string` | no | `null` |  |
+| `enterprise_marketplace_auto_renew` | `string` | no | `null` |  |
+| `grafana_plugins` | `map(any)` | no | `null` |  |
+| `tags` | `map(string)` | no | `null` |  |
+
+---
+
+### `azure_metric_alerts`
+
+**API version:** `2024-03-01-preview`
+
+Map of Metric Alert instances to create. Each map key acts as the for_each
+identifier and must be unique within this configuration.
+
+#### Attributes
+
+| Name | Type | Required | Default | Description |
+|------|------|:--------:|---------|-------------|
+| `subscription_id` | `string` | no | `null` |  |
+| `resource_group_name` | `string` | yes | — |  |
+| `metric_alert_name` | `string` | no | `null` |  |
+| `location` | `string` | no | `"global"` |  |
+| `enabled` | `bool` | no | `true` |  |
+| `severity` | `number` | yes | — |  |
+| `scopes` | `list(string)` | yes | — |  |
+| `evaluation_frequency` | `string` | yes | — |  |
+| `criteria` | `any` | yes | — |  |
+| `description` | `string` | no | `null` |  |
+| `window_size` | `string` | no | `null` |  |
+| `target_resource_type` | `string` | no | `null` |  |
+| `target_resource_region` | `string` | no | `null` |  |
+| `auto_mitigate` | `bool` | no | `true` |  |
+| `identity_type` | `string` | no | `null` |  |
+| `identity_user_assigned_identity_ids` | `list(string)` | no | `null` |  |
+| `custom_properties` | `map(string)` | no | `null` |  |
+| `action_properties` | `map(string)` | no | `null` |  |
+| `resolve_configuration` | `object` | no | `null` |  |
+| `actions` | `list(object)` | no | `[]` |  |
+| `tags` | `map(string)` | no | `null` |  |
+
+#### YAML Example
+
+```yaml
+azure_metric_alerts:
+  high-cpu:
+    resource_group_name: "rg-observability"
+    severity: 2
+    scopes: ["/subscriptions/00000000-0000-0000-0000-000000000000"]
+    evaluation_frequency: "PT5M"
+    criteria:
+      "odata.type": "Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria"
+      allOf: [{ name = "cpu", metricName = "Percentage CPU", operator = "GreaterThan", threshold = 90, timeAggregation = "Average", criterionType = "StaticThresholdCriterion" }]
+```
+
+---
+
+### `azure_monitor_private_link_scoped_resources`
+
+**API version:** `2021-09-01`
+
+Map of Azure Monitor Private Link Scoped Resource associations to create. Each map key acts as the for_each identifier. Links an Azure Monitor resource (Log Analytics Workspace, Data Collection Endpoint, Azure Monitor Workspace) into a Private Link Scope.
+
+#### Attributes
+
+| Name | Type | Required | Default | Description |
+|------|------|:--------:|---------|-------------|
+| `subscription_id` | `string` | no | `null` |  |
+| `resource_group_name` | `string` | yes | — |  |
+| `private_link_scope_name` | `string` | yes | — |  |
+| `scoped_resource_name` | `string` | no | `null` |  |
+| `linked_resource_id` | `string` | yes | — |  |
+
+---
+
+### `azure_monitor_private_link_scopes`
+
+**API version:** `2021-09-01`
+
+Map of Azure Monitor Private Link Scope instances to create. Each map key acts as the for_each identifier and must be unique within this configuration. When location is omitted, var.default_location is used as the default.
+
+#### Attributes
+
+| Name | Type | Required | Default | Description |
+|------|------|:--------:|---------|-------------|
+| `subscription_id` | `string` | no | `null` |  |
+| `resource_group_name` | `string` | yes | — |  |
+| `scope_name` | `string` | no | `null` |  |
+| `location` | `string` | no | `null` |  |
+| `ingestion_access_mode` | `string` | no | `"PrivateOnly"` |  |
+| `query_access_mode` | `string` | no | `"PrivateOnly"` |  |
+| `access_mode_exclusions` | `list(object)` | no | `[]` |  |
+| `tags` | `map(string)` | no | `null` |  |
+
+---
+
+### `azure_monitor_workspaces`
+
+**API version:** `2023-10-01-preview`
+
+Map of Azure Monitor Workspace instances to create. Each map key acts as the for_each identifier and must be unique within this configuration. When location is omitted, var.default_location is used as the default.
+
+#### Attributes
+
+| Name | Type | Required | Default | Description |
+|------|------|:--------:|---------|-------------|
+| `subscription_id` | `string` | no | `null` |  |
+| `resource_group_name` | `string` | yes | — |  |
+| `monitor_workspace_name` | `string` | no | `null` |  |
+| `location` | `string` | no | `null` |  |
+| `tags` | `map(string)` | no | `null` |  |
+
+---
+
+### `azure_scheduled_query_rules`
+
+**API version:** `2026-03-01`
+
+Map of Scheduled Query Rule instances to create. Each map key acts as the for_each
+identifier and must be unique within this configuration.
+
+#### Attributes
+
+| Name | Type | Required | Default | Description |
+|------|------|:--------:|---------|-------------|
+| `subscription_id` | `string` | no | `null` |  |
+| `resource_group_name` | `string` | yes | — |  |
+| `rule_name` | `string` | no | `null` |  |
+| `location` | `string` | no | `null` |  |
+| `kind` | `string` | no | `"LogAlert"` |  |
+| `identity_type` | `string` | no | `null` |  |
+| `identity_user_assigned_identity_ids` | `list(string)` | no | `null` |  |
+| `scopes` | `list(string)` | yes | — |  |
+| `criteria` | `object` | yes | — |  |
+| `description` | `string` | no | `null` |  |
+| `display_name` | `string` | no | `null` |  |
+| `severity` | `number` | no | `null` |  |
+| `enabled` | `bool` | no | `true` |  |
+| `evaluation_frequency` | `string` | no | `null` |  |
+| `window_size` | `string` | no | `null` |  |
+| `override_query_time_range` | `string` | no | `null` |  |
+| `target_resource_types` | `list(string)` | no | `null` |  |
+| `mute_actions_duration` | `string` | no | `null` |  |
+| `actions` | `object` | no | `null` |  |
+| `check_workspace_alerts_storage_configured` | `bool` | no | `false` |  |
+| `skip_query_validation` | `bool` | no | `false` |  |
+| `auto_mitigate` | `bool` | no | `true` |  |
+| `resolve_configuration` | `object` | no | `null` |  |
+| `tags` | `map(string)` | no | `null` |  |
+
+#### YAML Example
+
+```yaml
+azure_scheduled_query_rules:
+  failed-requests:
+    resource_group_name: "rg-observability"
+    location: "westeurope"
+    scopes: ["/subscriptions/.../workspaces/my-law"]
+    severity: 1
+    evaluation_frequency: "PT15M"
+    window_size: "PT15M"
+    criteria:
+      all_of: [{ query = "requests | where success == false", time_aggregation = "Count", operator = "GreaterThan", threshold = 5, failing_periods = { number_of_evaluation_periods = 1, min_failing_periods_to_alert = 1 } }]
+```
+
+---
+
+### `azure_management_groups`
+
+**API version:** `2023-04-01`
+
+Map of management groups to create or manage. Each map key acts as the
+for_each identifier and is used as management_group_id when the field is omitted.
+
+#### Attributes
+
+| Name | Type | Required | Default | Description |
+|------|------|:--------:|---------|-------------|
+| `management_group_id` | `string` | no | `null` | defaults to the map key |
+| `display_name` | `string` | no | `null` |  |
+| `parent_id` | `string` | no | `null` |  |
+| `_tenant` | `string` | no | `null` |  |
+
+#### YAML Example
+
+```yaml
+azure_management_groups:
+  mg_platform:
+    display_name: "Platform"
+    parent_id: ref:azure_management_groups.mg_root.id
+  mg_landing_zones:
+    display_name: "Landing Zones"
+    parent_id: ref:azure_management_groups.mg_root.id
+  mg_corp:
+    display_name: "Corp"
+    parent_id: ref:azure_management_groups.mg_landing_zones.id
+```
+
+---
+
 ### `azure_management_locks`
 
 **API version:** `2020-05-01`
@@ -1942,6 +2509,152 @@ azure_key_vaults:
     location: "westeurope"
     enable_rbac_authorization: true
     enable_purge_protection: true
+```
+
+---
+
+### `azure_policy_assignments`
+
+**API version:** `2025-11-01`
+
+Map of policy assignments. Each map key acts as the for_each identifier
+and is used as assignment_name when the field is omitted.
+
+policy_definition_id can reference:
+  - A custom policy:   ref:azure_policy_definitions.<key>.id
+  - A custom initiative: ref:azure_policy_set_definitions.<key>.id
+  - A built-in policy via externals: ref:externals.policy_definitions.<key>.id
+  - A built-in initiative via externals: ref:externals.policy_set_definitions.<key>.id
+  - An inline ARM ID: /providers/Microsoft.Authorization/policyDefinitions/{guid}
+
+#### Attributes
+
+| Name | Type | Required | Default | Description |
+|------|------|:--------:|---------|-------------|
+| `scope` | `string` | yes | — |  |
+| `assignment_name` | `string` | no | `null` | defaults to the map key |
+| `policy_definition_id` | `string` | yes | — |  |
+| `display_name` | `string` | no | `null` |  |
+| `description` | `string` | no | `null` |  |
+| `enforcement_mode` | `string` | no | `"Default"` |  |
+| `parameters` | `any` | no | `null` |  |
+| `not_scopes` | `list(string)` | no | `[]` |  |
+| `metadata` | `any` | no | `null` |  |
+| `identity_type` | `string` | no | `"None"` |  |
+| `identity_user_assigned_id` | `string` | no | `null` |  |
+| `location` | `string` | no | `null` |  |
+| `non_compliance_messages` | `list(object)` | no | `[]` |  |
+| `_tenant` | `string` | no | `null` |  |
+
+#### YAML Example
+
+```yaml
+azure_policy_assignments:
+  lz_require_env_tag::
+    scope:               ref:azure_management_groups.mg_landing_zones.id:
+    policy_definition_id: ref:azure_policy_definitions.require_env_tag.id:
+    display_name: "Require environment tag on LZ resources":
+    enforcement_mode: Default:
+  lz_deny_public_ip::
+    scope:               ref:azure_management_groups.mg_landing_zones.id:
+    policy_definition_id: ref:externals.policy_definitions.deny_public_ip.id:
+    display_name: "Deny public IP in landing zones":
+    enforcement_mode: Default:
+  lz_cis_benchmark::
+    scope:               ref:azure_management_groups.mg_landing_zones.id:
+    policy_definition_id: ref:externals.policy_set_definitions.cis_benchmark.id:
+    display_name: "CIS Microsoft Azure Foundations Benchmark":
+    enforcement_mode: DoNotEnforce:
+```
+
+---
+
+### `azure_policy_definitions`
+
+**API version:** `2025-11-01`
+
+Map of custom Azure Policy definitions. Each map key acts as the for_each
+identifier and is used as policy_definition_name when the field is omitted.
+
+scope must be a management group ID or subscription ID path:
+  ref:azure_management_groups.mg_platform.id
+  /subscriptions/<sub-id>
+
+#### Attributes
+
+| Name | Type | Required | Default | Description |
+|------|------|:--------:|---------|-------------|
+| `scope` | `string` | yes | — |  |
+| `policy_definition_name` | `string` | no | `null` | defaults to the map key |
+| `policy_type` | `string` | no | `"Custom"` |  |
+| `mode` | `string` | no | `"All"` |  |
+| `display_name` | `string` | yes | — |  |
+| `policy_rule` | `any` | yes | — |  |
+| `description` | `string` | no | `null` |  |
+| `metadata` | `any` | no | `null` |  |
+| `parameters` | `any` | no | `null` |  |
+| `_tenant` | `string` | no | `null` |  |
+
+#### YAML Example
+
+```yaml
+azure_policy_definitions:
+  require_env_tag:
+    scope: ref:azure_management_groups.mg_root.id
+    display_name: "Require environment tag on resources"
+    mode: "Indexed"
+    metadata:
+      category: "Tags"
+    policy_rule:
+      if:
+        field: "tags['environment']"
+        exists: "false"
+      then:
+        effect: "Deny"
+```
+
+---
+
+### `azure_policy_set_definitions`
+
+**API version:** `2025-11-01`
+
+Map of custom Azure Policy Set Definitions (Initiatives). Each map key acts
+as the for_each identifier and is used as policy_set_definition_name when
+the field is omitted.
+
+scope must be a management group ID path or subscription ID path.
+
+#### Attributes
+
+| Name | Type | Required | Default | Description |
+|------|------|:--------:|---------|-------------|
+| `scope` | `string` | yes | — |  |
+| `policy_set_definition_name` | `string` | no | `null` | defaults to the map key |
+| `policy_type` | `string` | no | `"Custom"` |  |
+| `display_name` | `string` | yes | — |  |
+| `policy_definitions` | `any` | no | `[]` |  |
+| `description` | `string` | no | `null` |  |
+| `metadata` | `any` | no | `null` |  |
+| `parameters` | `any` | no | `null` |  |
+| `policy_definition_groups` | `list(object)` | no | `[]` |  |
+| `_tenant` | `string` | no | `null` |  |
+
+#### YAML Example
+
+```yaml
+azure_policy_set_definitions:
+  lz_baseline:
+    scope: ref:azure_management_groups.mg_landing_zones.id
+    display_name: "Landing Zone Baseline Initiative"
+    metadata:
+      category: "Landing Zone"
+    policy_definitions: [
+        policy_definition_id: ref:azure_policy_definitions.require_env_tag.id
+        policy_definition_reference_id: "require_env_tag"
+        policy_definition_id: ref:externals.policy_definitions.deny_public_ip.id
+        policy_definition_reference_id: "deny_public_ip"
+    ]:
 ```
 
 ---

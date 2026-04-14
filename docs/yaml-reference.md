@@ -15,7 +15,7 @@ location:           ref:azure_resource_groups.app.location
 ## Providers
 
 
-### [Azure](yaml-reference-azure.md) — 71 resources
+### [Azure](yaml-reference-azure.md) — 91 resources
 
   - [`azure_foundry_accounts`](yaml-reference-azure.md#azure-foundry-accounts)
   - [`azure_foundry_deployments`](yaml-reference-azure.md#azure-foundry-deployments)
@@ -44,6 +44,7 @@ location:           ref:azure_resource_groups.app.location
   - [`azure_dns_record_sets`](yaml-reference-azure.md#azure-dns-record-sets)
   - [`azure_dns_resolvers`](yaml-reference-azure.md#azure-dns-resolvers)
   - [`azure_dns_zones`](yaml-reference-azure.md#azure-dns-zones)
+  - [`azure_private_dns_zone_virtual_network_links`](yaml-reference-azure.md#azure-private-dns-zone-virtual-network-links)
   - [`azure_private_dns_zones`](yaml-reference-azure.md#azure-private-dns-zones)
   - [`azure_ciam_directories`](yaml-reference-azure.md#azure-ciam-directories)
   - [`azure_ipam_pools`](yaml-reference-azure.md#azure-ipam-pools)
@@ -65,6 +66,22 @@ location:           ref:azure_resource_groups.app.location
   - [`azure_virtual_networks`](yaml-reference-azure.md#azure-virtual-networks)
   - [`azure_virtual_wans`](yaml-reference-azure.md#azure-virtual-wans)
   - [`azure_vpn_gateways`](yaml-reference-azure.md#azure-vpn-gateways)
+  - [`azure_action_groups`](yaml-reference-azure.md#azure-action-groups)
+  - [`azure_activity_log_alerts`](yaml-reference-azure.md#azure-activity-log-alerts)
+  - [`azure_alert_processing_rules`](yaml-reference-azure.md#azure-alert-processing-rules)
+  - [`azure_application_insights`](yaml-reference-azure.md#azure-application-insights)
+  - [`azure_data_collection_endpoints`](yaml-reference-azure.md#azure-data-collection-endpoints)
+  - [`azure_data_collection_rule_associations`](yaml-reference-azure.md#azure-data-collection-rule-associations)
+  - [`azure_data_collection_rules`](yaml-reference-azure.md#azure-data-collection-rules)
+  - [`azure_diagnostic_settings`](yaml-reference-azure.md#azure-diagnostic-settings)
+  - [`azure_log_analytics_workspaces`](yaml-reference-azure.md#azure-log-analytics-workspaces)
+  - [`azure_managed_grafanas`](yaml-reference-azure.md#azure-managed-grafanas)
+  - [`azure_metric_alerts`](yaml-reference-azure.md#azure-metric-alerts)
+  - [`azure_monitor_private_link_scoped_resources`](yaml-reference-azure.md#azure-monitor-private-link-scoped-resources)
+  - [`azure_monitor_private_link_scopes`](yaml-reference-azure.md#azure-monitor-private-link-scopes)
+  - [`azure_monitor_workspaces`](yaml-reference-azure.md#azure-monitor-workspaces)
+  - [`azure_scheduled_query_rules`](yaml-reference-azure.md#azure-scheduled-query-rules)
+  - [`azure_management_groups`](yaml-reference-azure.md#azure-management-groups)
   - [`azure_management_locks`](yaml-reference-azure.md#azure-management-locks)
   - [`azure_resource_groups`](yaml-reference-azure.md#azure-resource-groups)
   - [`azure_resource_provider_features`](yaml-reference-azure.md#azure-resource-provider-features)
@@ -72,6 +89,9 @@ location:           ref:azure_resource_groups.app.location
   - [`azure_federated_identity_credentials`](yaml-reference-azure.md#azure-federated-identity-credentials)
   - [`azure_key_vault_keys`](yaml-reference-azure.md#azure-key-vault-keys)
   - [`azure_key_vaults`](yaml-reference-azure.md#azure-key-vaults)
+  - [`azure_policy_assignments`](yaml-reference-azure.md#azure-policy-assignments)
+  - [`azure_policy_definitions`](yaml-reference-azure.md#azure-policy-definitions)
+  - [`azure_policy_set_definitions`](yaml-reference-azure.md#azure-policy-set-definitions)
   - [`azure_role_assignments`](yaml-reference-azure.md#azure-role-assignments)
   - [`azure_role_assignments_post`](yaml-reference-azure.md#azure-role-assignments-post)
   - [`azure_user_assigned_identities`](yaml-reference-azure.md#azure-user-assigned-identities)
