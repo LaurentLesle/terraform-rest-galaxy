@@ -50,6 +50,7 @@ variable "azure_storage_accounts" {
     is_nfs_v3_enabled                         = optional(bool, null)
     enable_extended_groups                    = optional(bool, null)
     immutable_storage_with_versioning_enabled = optional(bool, null)
+    _tenant                                   = optional(string, null)
   }))
   description = <<-EOT
     Map of storage accounts to create or manage. Each map key acts as the for_each
@@ -134,4 +135,5 @@ module "azure_storage_accounts" {
   enable_extended_groups                       = try(each.value.enable_extended_groups, null)
   immutable_storage_with_versioning_enabled    = try(each.value.immutable_storage_with_versioning_enabled, null)
   check_existance                              = var.check_existance
+  auth_ref                                     = try(each.value._tenant, null)
 }
