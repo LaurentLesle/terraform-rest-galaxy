@@ -101,7 +101,8 @@ locals {
 
 # ── Resource provider registration check ──────────────────────────────────────
 data "rest_resource" "provider_check" {
-  id = "/subscriptions/${var.subscription_id}/providers/Microsoft.Storage"
+  id       = "/subscriptions/${var.subscription_id}/providers/Microsoft.Storage"
+  auth_ref = var.auth_ref
 
   query = {
     api-version = ["2025-04-01"]
@@ -115,9 +116,10 @@ data "rest_resource" "provider_check" {
 # Runs at apply time (before the PUT). Skipped when importing (check_existance).
 
 resource "rest_operation" "check_name_availability" {
-  count  = var.check_existance ? 0 : 1
-  path   = "/subscriptions/${var.subscription_id}/providers/Microsoft.Storage/checkNameAvailability"
-  method = "POST"
+  count    = var.check_existance ? 0 : 1
+  path     = "/subscriptions/${var.subscription_id}/providers/Microsoft.Storage/checkNameAvailability"
+  method   = "POST"
+  auth_ref = var.auth_ref
 
   query = {
     api-version = [local.api_version]
@@ -135,6 +137,7 @@ resource "rest_resource" "storage_account" {
   path            = local.sa_path
   create_method   = "PUT"
   check_existance = var.check_existance
+  auth_ref        = var.auth_ref
 
   query = {
     api-version = [local.api_version]

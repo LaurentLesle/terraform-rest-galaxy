@@ -312,3 +312,9 @@ variable "check_existance" {
   default     = false
   description = "Check whether the resource already exists before creating it. When true, the provider performs a GET before PUT and imports the resource into state if it exists. Set to true for brownfield import workflows."
 }
+
+variable "auth_ref" {
+  type        = string
+  default     = null
+  description = "Named auth reference for cross-tenant access."
+}
