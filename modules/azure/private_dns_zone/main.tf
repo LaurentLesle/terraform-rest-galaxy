@@ -46,7 +46,7 @@ resource "rest_resource" "private_dns_zone" {
     status_locator    = "body.properties.provisioningState"
     default_delay_sec = 15
     status = {
-      success = "Succeeded"
+      success = ["Succeeded"]
       pending = ["Creating", "Updating", "Accepted"]
     }
   }
@@ -55,7 +55,7 @@ resource "rest_resource" "private_dns_zone" {
     status_locator    = "body.properties.provisioningState"
     default_delay_sec = 10
     status = {
-      success = "Succeeded"
+      success = ["Succeeded"]
       pending = ["Updating", "Accepted"]
     }
   }
@@ -64,7 +64,7 @@ resource "rest_resource" "private_dns_zone" {
     status_locator    = "code"
     default_delay_sec = 15
     status = {
-      success = "404"
+      success = ["404"]
       pending = ["202", "200"]
     }
   }
@@ -112,7 +112,7 @@ resource "rest_resource" "virtual_network_link" {
     status_locator    = "body.properties.provisioningState"
     default_delay_sec = 15
     status = {
-      success = "Succeeded"
+      success = ["Succeeded"]
       pending = ["Creating", "Updating", "Accepted", "InProgress"]
     }
   }
@@ -121,7 +121,7 @@ resource "rest_resource" "virtual_network_link" {
     status_locator    = "body.properties.provisioningState"
     default_delay_sec = 10
     status = {
-      success = "Succeeded"
+      success = ["Succeeded"]
       pending = ["Updating", "Accepted"]
     }
   }
@@ -130,7 +130,7 @@ resource "rest_resource" "virtual_network_link" {
     status_locator    = "code"
     default_delay_sec = 15
     status = {
-      success = "404"
+      success = ["404"]
       pending = ["202", "200"]
     }
   }

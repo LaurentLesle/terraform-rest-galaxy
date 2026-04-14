@@ -24,7 +24,7 @@ resource "rest_resource" "service_principal" {
     status_locator    = "code"
     default_delay_sec = 10
     status = {
-      success = "200"
+      success = ["200"]
       pending = ["404"]
     }
   }

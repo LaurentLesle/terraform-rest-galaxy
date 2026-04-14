@@ -93,7 +93,7 @@ resource "rest_operation" "foundry_managed_network" {
     status_locator    = "body.properties.provisioningState"
     default_delay_sec = 30
     status = {
-      success = "Succeeded"
+      success = ["Succeeded"]
       pending = ["Creating", "Updating", "Accepted", "Provisioning", "Running"]
     }
   }

@@ -91,7 +91,7 @@ resource "rest_resource" "connected_cluster" {
     status_locator    = "body.properties.provisioningState"
     default_delay_sec = 10
     status = {
-      success = "Succeeded"
+      success = ["Succeeded"]
       pending = ["Provisioning", "Updating", "Accepted"]
     }
   }
@@ -101,7 +101,7 @@ resource "rest_resource" "connected_cluster" {
     status_locator    = "body.properties.provisioningState"
     default_delay_sec = 10
     status = {
-      success = "Succeeded"
+      success = ["Succeeded"]
       pending = ["Provisioning", "Updating", "Accepted"]
     }
   }
@@ -111,7 +111,7 @@ resource "rest_resource" "connected_cluster" {
     status_locator    = "code"
     default_delay_sec = 10
     status = {
-      success = "404"
+      success = ["404"]
       pending = ["202", "200"]
     }
   }
@@ -134,7 +134,7 @@ resource "rest_operation" "wait_for_connection" {
     status_locator    = "body.properties.connectivityStatus"
     default_delay_sec = 15
     status = {
-      success = "Connected"
+      success = ["Connected"]
       pending = ["Connecting"]
     }
   }

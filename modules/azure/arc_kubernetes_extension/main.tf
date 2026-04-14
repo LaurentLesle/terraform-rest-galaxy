@@ -135,7 +135,7 @@ resource "rest_resource" "extension" {
     status_locator    = "body.properties.provisioningState"
     default_delay_sec = 15
     status = {
-      success = "Succeeded"
+      success = ["Succeeded"]
       pending = ["Creating", "Updating", "Accepted"]
     }
   }
@@ -144,7 +144,7 @@ resource "rest_resource" "extension" {
     status_locator    = "body.properties.provisioningState"
     default_delay_sec = 15
     status = {
-      success = "Succeeded"
+      success = ["Succeeded"]
       pending = ["Creating", "Updating", "Accepted"]
     }
   }
@@ -154,7 +154,7 @@ resource "rest_resource" "extension" {
     status_locator    = "code"
     default_delay_sec = 15
     status = {
-      success = "404"
+      success = ["404"]
       pending = ["202", "200"]
     }
   }

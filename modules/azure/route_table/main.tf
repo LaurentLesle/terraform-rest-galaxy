@@ -55,7 +55,7 @@ resource "rest_resource" "route_table" {
     status_locator    = "body.properties.provisioningState"
     default_delay_sec = 10
     status = {
-      success = "Succeeded"
+      success = ["Succeeded"]
       pending = ["Updating", "Provisioning"]
     }
   }
@@ -64,7 +64,7 @@ resource "rest_resource" "route_table" {
     status_locator    = "body.properties.provisioningState"
     default_delay_sec = 10
     status = {
-      success = "Succeeded"
+      success = ["Succeeded"]
       pending = ["Updating", "Provisioning"]
     }
   }
@@ -73,7 +73,7 @@ resource "rest_resource" "route_table" {
     status_locator    = "code"
     default_delay_sec = 10
     status = {
-      success = "404"
+      success = ["404"]
       pending = ["200", "202"]
     }
   }

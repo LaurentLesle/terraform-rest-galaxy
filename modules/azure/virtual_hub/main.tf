@@ -66,7 +66,7 @@ resource "rest_resource" "virtual_hub" {
     status_locator    = "body.properties.provisioningState"
     default_delay_sec = 30
     status = {
-      success = "Succeeded"
+      success = ["Succeeded"]
       pending = ["Updating", "Provisioning"]
     }
   }
@@ -75,7 +75,7 @@ resource "rest_resource" "virtual_hub" {
     status_locator    = "body.properties.provisioningState"
     default_delay_sec = 30
     status = {
-      success = "Succeeded"
+      success = ["Succeeded"]
       pending = ["Updating", "Provisioning"]
     }
   }
@@ -84,7 +84,7 @@ resource "rest_resource" "virtual_hub" {
     status_locator    = "code"
     default_delay_sec = 30
     status = {
-      success = "404"
+      success = ["404"]
       pending = ["200", "202"]
     }
   }

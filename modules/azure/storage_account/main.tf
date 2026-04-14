@@ -198,7 +198,7 @@ resource "rest_resource" "storage_account" {
     status_locator    = "body.properties.provisioningState"
     default_delay_sec = 5
     status = {
-      success = "Succeeded"
+      success = ["Succeeded"]
       pending = ["Creating", "Updating", "Accepted", "Resolving", "ResolvingDns", "Provisioning"]
     }
   }
@@ -207,7 +207,7 @@ resource "rest_resource" "storage_account" {
     status_locator    = "body.properties.provisioningState"
     default_delay_sec = 5
     status = {
-      success = "Succeeded"
+      success = ["Succeeded"]
       pending = ["Updating", "Accepted", "Resolving", "ResolvingDns", "Provisioning"]
     }
   }

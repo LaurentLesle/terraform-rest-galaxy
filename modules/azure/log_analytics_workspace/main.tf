@@ -106,7 +106,7 @@ resource "rest_resource" "log_analytics_workspace" {
     status_locator    = "body.properties.provisioningState"
     default_delay_sec = 15
     status = {
-      success = "Succeeded"
+      success = ["Succeeded"]
       pending = ["Creating", "Updating", "Provisioning", "Accepted", "ProvisioningAccount"]
     }
   }
@@ -115,7 +115,7 @@ resource "rest_resource" "log_analytics_workspace" {
     status_locator    = "body.properties.provisioningState"
     default_delay_sec = 15
     status = {
-      success = "Succeeded"
+      success = ["Succeeded"]
       pending = ["Updating", "Provisioning", "Accepted"]
     }
   }
@@ -125,7 +125,7 @@ resource "rest_resource" "log_analytics_workspace" {
     status_locator    = "code"
     default_delay_sec = 15
     status = {
-      success = "404"
+      success = ["404"]
       pending = ["202", "200"]
     }
   }

@@ -55,7 +55,7 @@ resource "rest_resource" "billing_permission_request" {
     status_locator    = "code"
     default_delay_sec = 5
     status = {
-      success = "200"
+      success = ["200"]
       pending = ["202"]
     }
   }
@@ -101,7 +101,7 @@ resource "rest_resource" "billing_request_approval" {
     status_locator    = "code"
     default_delay_sec = 5
     status = {
-      success = "200"
+      success = ["200"]
       pending = ["202"]
     }
   }
