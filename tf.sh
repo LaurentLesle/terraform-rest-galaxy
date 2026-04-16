@@ -2,7 +2,7 @@
 # ── tf: Terraform wrapper that reads terraform_backend from YAML configs ─────
 #
 # Usage:
-#   ./tf.sh <action> <config_file>
+#   ./tf.sh <action> <config_file> [options]
 #
 # Actions:
 #   init      Configure backend + terraform init
@@ -13,9 +13,18 @@
 #   vars      List variables needed for a config (--resolve to show values)
 #   status    Show all terraform_backend sections across configs
 #
+# Apply options:
+#   --fix-ci [N]   Re-run apply on failure until convergence.
+#                  N = max cycles (default: 100). 0 = unlimited.
+#                  Useful when resources have eventual-consistency dependencies
+#                  (RBAC propagation, DNS, etc.) that resolve on a second pass.
+#
 # Examples:
 #   ./tf.sh plan configurations/00-bootstrap/config.yaml
 #   ./tf.sh apply configurations/00-bootstrap/config.yaml
+#   ./tf.sh apply configurations/networking.yaml -auto-approve --fix-ci
+#   ./tf.sh apply configurations/networking.yaml -auto-approve --fix-ci 5
+#   ./tf.sh apply configurations/networking.yaml -auto-approve --fix-ci 0
 #   ./tf.sh plan configurations/01-launchpad/config.yaml
 #   ./tf.sh status
 #
@@ -936,7 +945,7 @@ main() {
 
   if [[ -z "$action" || -z "$config_file" ]]; then
     cat << 'USAGE'
-Usage: ./tf.sh <action> <config_file>
+Usage: ./tf.sh <action> <config_file> [options]
 
 Actions:
   init           Configure backend + terraform init
@@ -949,9 +958,16 @@ Actions:
   vars           List variables needed for a config (--resolve to show values)
   status         Show all terraform_backend sections
 
+Apply options:
+  --fix-ci [N]   Re-run apply on failure until convergence.
+                 N = max cycles (default: 100). 0 = unlimited.
+
 Examples:
   ./tf.sh plan configurations/00-bootstrap/config.yaml
   ./tf.sh apply configurations/01-launchpad/config.yaml
+  ./tf.sh apply configurations/networking.yaml -auto-approve --fix-ci
+  ./tf.sh apply configurations/networking.yaml -auto-approve --fix-ci 5
+  ./tf.sh apply configurations/networking.yaml -auto-approve --fix-ci 0
   ./tf.sh vars configurations/01-launchpad/config.yaml
   ./tf.sh vars --resolve configurations/01-launchpad/config.yaml
   ./tf.sh status
@@ -997,6 +1013,28 @@ USAGE
   shift 2
   local -a extra_args=("$@")
 
+  # ── Parse --fix-ci [N] out of extra_args ──────────────────────────────────
+  # fix_ci_cycles: -1 = disabled, 0 = unlimited, N = max cycles (default 100)
+  local fix_ci_cycles=-1
+  local -a _clean=()
+  local _i=0
+  while [[ $_i -lt ${#extra_args[@]} ]]; do
+    if [[ "${extra_args[$_i]}" == "--fix-ci" ]]; then
+      local _next=$(( _i + 1 ))
+      if [[ $_next -lt ${#extra_args[@]} && "${extra_args[$_next]}" =~ ^[0-9]+$ ]]; then
+        fix_ci_cycles="${extra_args[$_next]}"
+        _i=$(( _i + 2 ))
+      else
+        fix_ci_cycles=100
+        _i=$(( _i + 1 ))
+      fi
+    else
+      _clean+=("${extra_args[$_i]}")
+      _i=$(( _i + 1 ))
+    fi
+  done
+  extra_args=("${_clean[@]+"${_clean[@]}"}")
+
   # Build flat Terraform root from galaxy/ source
   info "Assembling .build/ from galaxy/ ..."
   "$REPO_ROOT/scripts/build-galaxy.sh"
@@ -1018,9 +1056,30 @@ USAGE
       terraform -chdir="$TF_ROOT" plan $var_flags "${extra_args[@]+"${extra_args[@]}"}"
       ;;
     apply)
-      info "Running terraform apply..."
-      # shellcheck disable=SC2086
-      terraform -chdir="$TF_ROOT" apply $var_flags "${extra_args[@]+"${extra_args[@]}"}"
+      if [[ $fix_ci_cycles -ge 0 ]]; then
+        # --fix-ci mode: re-run apply on failure until convergence
+        local _cycle=1
+        local _max_label
+        [[ $fix_ci_cycles -eq 0 ]] && _max_label="unlimited" || _max_label="$fix_ci_cycles"
+        info "Running terraform apply (--fix-ci mode, max cycles: $_max_label)..."
+        while true; do
+          info "apply cycle $_cycle / $_max_label"
+          # shellcheck disable=SC2086
+          if terraform -chdir="$TF_ROOT" apply $var_flags "${extra_args[@]+"${extra_args[@]}"}"; then
+            ok "Apply converged after $_cycle cycle(s)."
+            break
+          fi
+          if [[ $fix_ci_cycles -gt 0 && $_cycle -ge $fix_ci_cycles ]]; then
+            die "Apply did not converge after $fix_ci_cycles cycle(s)."
+          fi
+          warn "Cycle $_cycle failed — retrying..."
+          _cycle=$(( _cycle + 1 ))
+        done
+      else
+        info "Running terraform apply..."
+        # shellcheck disable=SC2086
+        terraform -chdir="$TF_ROOT" apply $var_flags "${extra_args[@]+"${extra_args[@]}"}"
+      fi
 
       # Bootstrap special: upload state after successful apply
       if [[ "$backend_type" == "local" ]]; then
